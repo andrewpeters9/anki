@@ -2,7 +2,7 @@ module.exports = {
     testMatch: ["**/*.test.ts"],
     transform: {
         "\\.(ts|js)$": [
-            "<rootDir>/esbuild_jest.mjs",
+            "<rootDir>/esbuild_jest.ts",
             {},
         ],
     },

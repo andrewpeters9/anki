@@ -109,17 +109,17 @@ function useInputHandler(): [InputHandlerAPI, SetupInputHandlerAction] {
 
     async function onKeyDown(this: Element, event: KeyboardEvent): Promise<void> {
         if (isArrowDown(event)) {
-            specialKey.dispatch({ event, action: "caretDown" });
+            await specialKey.dispatch({ event, action: "caretDown" });
         } else if (isArrowUp(event)) {
-            specialKey.dispatch({ event, action: "caretUp" });
+            await specialKey.dispatch({ event, action: "caretUp" });
         } else if (isArrowRight(event)) {
-            specialKey.dispatch({ event, action: "caretRight" });
+            await specialKey.dispatch({ event, action: "caretRight" });
         } else if (isArrowLeft(event)) {
-            specialKey.dispatch({ event, action: "caretLeft" });
+            await specialKey.dispatch({ event, action: "caretLeft" });
         } else if (event.code === "Enter" || event.code === "NumpadEnter") {
-            specialKey.dispatch({ event, action: "enter" });
+            await specialKey.dispatch({ event, action: "enter" });
         } else if (event.code === "Tab") {
-            specialKey.dispatch({ event, action: "tab" });
+            await specialKey.dispatch({ event, action: "tab" });
         }
     }
 

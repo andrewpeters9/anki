@@ -167,7 +167,7 @@ fn build_js(build: &mut Build) -> Result<()> {
         build.add(
             "qt/aqt:data/web/js",
             EsbuildScript {
-                script: "ts/transform_ts.mjs".into(),
+                script: "ts/transform_ts.ts".into(),
                 entrypoint: format!("qt/aqt/data/web/js/{ts_file}.ts").into(),
                 deps: inputs![],
                 output_stem: &format!("qt/_aqt/data/web/js/{ts_file}"),

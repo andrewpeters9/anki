@@ -232,7 +232,7 @@ fn build_and_check_pages(build: &mut Build) -> Result<()> {
         build.add(
             &group,
             EsbuildScript {
-                script: inputs!["ts/bundle_svelte.mjs"],
+                script: inputs!["ts/bundle_svelte.ts"],
                 entrypoint: inputs![format!("ts/{name}/index.ts")],
                 output_stem: &format!("ts/{name}/{name}"),
                 deps: deps.clone(),
@@ -356,7 +356,7 @@ fn build_and_check_editor(build: &mut Build) -> Result<()> {
         build.add(
             "ts:editor",
             EsbuildScript {
-                script: inputs!["ts/bundle_svelte.mjs"],
+                script: inputs!["ts/bundle_svelte.ts"],
                 entrypoint: inputs![format!("ts/editor/{entrypoint}.ts")],
                 output_stem: &stem,
                 deps: editor_deps.clone(),
@@ -386,7 +386,7 @@ fn build_and_check_reviewer(build: &mut Build) -> Result<()> {
     build.add(
         "ts:reviewer:reviewer.js",
         EsbuildScript {
-            script: inputs!["ts/bundle_ts.mjs"],
+            script: inputs!["ts/bundle_ts.ts"],
             entrypoint: "ts/reviewer/index_wrapper.ts".into(),
             output_stem: "ts/reviewer/reviewer",
             deps: reviewer_deps.clone(),
@@ -405,7 +405,7 @@ fn build_and_check_reviewer(build: &mut Build) -> Result<()> {
     build.add(
         "ts:reviewer:reviewer_extras_bundle.js",
         EsbuildScript {
-            script: inputs!["ts/bundle_ts.mjs"],
+            script: inputs!["ts/bundle_ts.ts"],
             entrypoint: "ts/reviewer/reviewer_extras.ts".into(),
             output_stem: "ts/reviewer/reviewer_extras_bundle",
             deps: reviewer_deps.clone(),
@@ -466,7 +466,7 @@ fn build_and_check_mathjax(build: &mut Build) -> Result<()> {
     build.add(
         "ts:mathjax",
         EsbuildScript {
-            script: "ts/transform_ts.mjs".into(),
+            script: "ts/transform_ts.ts".into(),
             entrypoint: "ts/mathjax/index.ts".into(),
             deps: files.clone(),
             output_stem: "ts/mathjax/mathjax",

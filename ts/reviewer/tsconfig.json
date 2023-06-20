@@ -1,7 +1,6 @@
 {
-    "extends": "../tsconfig.json",
-    "include": ["*"],
-    // "references": [{ "path": "../lib" }],
+    // @TODO, how would we change compiler options for this component?
+    // @TODO cont., maybe we just pass them as a param in esbuild?
     "compilerOptions": {
         // css-browser-selector fails if our output bundle is strict
         "alwaysStrict": false,
