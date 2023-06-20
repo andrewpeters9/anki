@@ -7,10 +7,12 @@ import * as esbuild from "https://deno.land/x/esbuild@v0.17.19/mod.js";
 const [entrypoint = "ts/mathjax/index.ts", js_out = "./dist/mathjax.js"] =
   Deno.args;
 
+console.log(Deno.args);
+
 // support Qt 5.14
 const target = ["es6", "chrome77"];
 
-const result = await esbuild.build({
+await esbuild.build({
   plugins: [...denoPlugins()],
   bundle: false,
   entryPoints: [entrypoint],
@@ -19,7 +21,5 @@ const result = await esbuild.build({
   preserveSymlinks: true,
   target,
 });
-
-console.log(result.outputFiles);
 
 esbuild.stop();
