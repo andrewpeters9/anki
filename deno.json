@@ -1,0 +1,15 @@
+{
+  "nodeModulesDir": true,
+  "compilerOptions": {
+    "isolatedModules": true,
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["dom", "dom.iterable", "dom.asynciterable", "deno.ns", "deno.window", "deno.worker"],
+    "strict": true,
+    "noImplicitAny": false,
+    "alwaysStrict": true,
+    "noUncheckedIndexedAccess": true,
+    "suppressImplicitAnyIndexErrors": true,
+    "jsx": "react"
+  }
+}
