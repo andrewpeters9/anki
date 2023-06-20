@@ -11,10 +11,10 @@ import json
 import os
 
 from fluent.syntax import parse
-from fluent.syntax.ast import Junk
+from fluent.syntax.ast import Junk, Message
 from fluent.syntax.serializer import serialize_element
 
-root = os.environ["BUILD_WORKSPACE_DIRECTORY"]
+root = ".."
 ftl_files = glob.glob(os.path.join(root, "ftl", "core", "*.ftl"), recursive=True)
 keys_by_value: dict[str, list[str]] = {}
 
@@ -23,7 +23,7 @@ for path in ftl_files:
     for ent in obj.body:
         if isinstance(ent, Junk):
             raise Exception(f"file had junk! {path} {ent}")
-        if getattr(ent, "id", None):
+        if isinstance(ent, Message):
             key = ent.id.name
             val = "".join(serialize_element(elem) for elem in ent.value.elements)
             if val in keys_by_value:

@@ -26,14 +26,18 @@ in the provided commands, `--pre` tells pip to fetch alpha/beta versions. If you
 
 ## Building from source
 
+Clone the git repo into a folder of your choosing. The folder path must not
+contain spaces, and should not be too long if you are on Windows.
+
 On all platforms, you will need to install:
 
 - Rustup (https://rustup.rs/). The Rust version pinned in rust-toolchain.toml
   will be automatically downloaded if not yet installed. If removing that file
   to use a distro-provided Rust, newer Rust versions will typically work for
   building but may fail tests; older Rust versions may not work at all.
-- Ninja (unzip from https://github.com/ninja-build/ninja/releases/tag/v1.11.1 and
-  place on your path, or from your distro/homebrew if it's 1.10+)
+- N2 or Ninja. On Linux/Mac, N2 gives better status output (run tools/install-n2). Ninja
+  can be downloaded from https://github.com/ninja-build/ninja/releases/tag/v1.11.1 and
+  placed on your path, or from your distro/homebrew if it's 1.10+.
 
 Platform-specific requirements:
 

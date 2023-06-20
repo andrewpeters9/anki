@@ -24,7 +24,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
     export let state: DeckOptionsState;
 
-    /// Ensure blur handler has fired so changes get committed.
+    /** Ensure blur handler has fired so changes get committed. */
     async function commitEditing(): Promise<void> {
         if (document.activeElement instanceof HTMLElement) {
             document.activeElement.blur();
@@ -95,17 +95,18 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         {@html chevronDown}
     </IconButton>
     <Popover slot="floating">
-        <DropdownItem on:click={() => dispatch("add")}
-            >{tr.deckConfigAddGroup()}</DropdownItem
-        >
-        <DropdownItem on:click={() => dispatch("clone")}
-            >{tr.deckConfigCloneGroup()}</DropdownItem
-        >
+        <DropdownItem on:click={() => dispatch("add")}>
+            {tr.deckConfigAddGroup()}
+        </DropdownItem>
+        <DropdownItem on:click={() => dispatch("clone")}>
+            {tr.deckConfigCloneGroup()}
+        </DropdownItem>
         <DropdownItem on:click={() => dispatch("rename")}>
             {tr.deckConfigRenameGroup()}
         </DropdownItem>
-        <DropdownItem on:click={removeConfig}>{tr.deckConfigRemoveGroup()}</DropdownItem
-        >
+        <DropdownItem on:click={removeConfig}>
+            {tr.deckConfigRemoveGroup()}
+        </DropdownItem>
         <DropdownDivider />
         <DropdownItem on:click={() => save(true)}>
             {tr.deckConfigSaveToAllSubdecks()}

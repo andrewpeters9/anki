@@ -108,12 +108,13 @@ class ThemeManager:
             return path
 
         filename = f"{name}-{'dark' if self.night_mode else 'light'}.svg"
-
-        return (
-            os.path.join(aqt_data_folder(), "qt", "icons", filename)
-            .replace("\\\\?\\", "")
-            .replace("\\", "/")
-        )
+        path = os.path.join(aqt_data_folder(), "qt", "icons", filename)
+        path = path.replace("\\\\?\\", "").replace("\\", "/")
+        # Workaround for Qt bug. First attempt was percent-escaping the chars,
+        # but Qt can't handle that.
+        # https://forum.qt.io/topic/55274/solved-qss-with-special-characters/11
+        path = re.sub(r"([\u00A1-\u00FF])", r"\\\1", path)
+        return path
 
     def icon_from_resources(self, path: str | ColoredIcon) -> QIcon:
         "Fetch icon from Qt resources."
@@ -156,7 +157,7 @@ class ThemeManager:
 
         return cache.setdefault(path, icon)
 
-    def body_class(self, night_mode: bool | None = None) -> str:
+    def body_class(self, night_mode: bool | None = None, reviewer: bool = False) -> str:
         "Returns space-separated class list for platform/theme/global settings."
         classes = []
         if is_win:
@@ -172,7 +173,7 @@ class ThemeManager:
             classes.extend(["nightMode", "night_mode"])
             if self.macos_dark_mode():
                 classes.append("macos-dark-mode")
-        if aqt.mw.pm.reduce_motion():
+        if aqt.mw.pm.reduce_motion() and not reviewer:
             classes.append("reduce-motion")
         if not aqt.mw.pm.minimalist_mode():
             classes.append("fancy")
@@ -184,7 +185,7 @@ class ThemeManager:
         self, card_ord: int, night_mode: bool | None = None
     ) -> str:
         "Returns body classes used when showing a card."
-        return f"card card{card_ord+1} {self.body_class(night_mode)}"
+        return f"card card{card_ord+1} {self.body_class(night_mode, reviewer=True)}"
 
     def var(self, vars: dict[str, str]) -> str:
         """Given day/night colors/props, return the correct one for the current theme."""
@@ -410,12 +411,12 @@ def get_linux_dark_mode() -> bool:
             )
         except FileNotFoundError as e:
             # detection strategy failed, missing program
-            print(e)
+            # print(e)
             continue
 
         except subprocess.CalledProcessError as e:
             # detection strategy failed, command returned error
-            print(e)
+            # print(e)
             continue
 
         return parse_stdout(process.stdout)

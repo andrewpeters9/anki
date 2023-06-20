@@ -31,7 +31,8 @@ fn initialize_logging(path: Option<&str>) -> PyResult<()> {
 #[pyfunction]
 fn syncserver() -> PyResult<()> {
     set_global_logger(None).unwrap();
-    SimpleServer::run().map_err(|e| PyException::new_err(format!("{e:?}")))
+    let err = SimpleServer::run();
+    Err(PyException::new_err(err.to_string()))
 }
 
 #[pyfunction]
@@ -52,7 +53,7 @@ impl Backend {
         input: &PyBytes,
     ) -> PyResult<PyObject> {
         let in_bytes = input.as_bytes();
-        py.allow_threads(|| self.backend.run_method(service, method, in_bytes))
+        py.allow_threads(|| self.backend.run_service_method(service, method, in_bytes))
             .map(|out_bytes| {
                 let out_obj = PyBytes::new(py, &out_bytes);
                 out_obj.into()

@@ -34,8 +34,8 @@ importing-mnemosyne-20-deck-db = Mnemosyne 2.0 Deck (*.db)
 importing-multicharacter-separators-are-not-supported-please = Multi-character separators are not supported. Please enter one character only.
 importing-notes-added-from-file = Notes added from file: { $val }
 importing-notes-found-in-file = Notes found in file: { $val }
-importing-notes-skipped-as-theyre-already-in = Notes skipped, as they're already in your collection: { $val }
-importing-notes-that-could-not-be-imported = Notes that could not be imported as note type has changed: { $val }
+importing-notes-skipped-as-theyre-already-in = Notes skipped, as up-to-date copies are already in your collection: { $val }
+importing-notes-skipped-update-due-to-notetype = Notes not updated, as notetype has been modified since you first imported the notes: { $val }
 importing-notes-updated-as-file-had-newer = Notes updated, as file had newer version: { $val }
 importing-packaged-anki-deckcollection-apkg-colpkg-zip = Packaged Anki Deck/Collection (*.apkg *.colpkg *.zip)
 importing-pauker-18-lesson-paugz = Pauker 1.8 Lesson (*.pau.gz)
@@ -106,10 +106,19 @@ importing-update = Update
 importing-tag-all-notes = Tag all notes
 importing-tag-updated-notes = Tag updated notes
 importing-file = File
+# "Match scope: notetype / notetype and deck". Controls how duplicates are matched.
 importing-match-scope = Match scope
+# Used with the 'match scope' option
 importing-notetype-and-deck = Notetype and deck
+importing-cards-added =
+    { $count ->
+        [one] { $count } card added.
+       *[other] { $count } cards added.
+    }
+importing-file-empty = The file you selected is empty.
 
 ## NO NEED TO TRANSLATE. This text is no longer used by Anki, and will be removed in the future.
 
 importing-importing-collection = Importing collection...
 importing-unable-to-import-filename = Unable to import { $filename }: file type not supported
+importing-notes-that-could-not-be-imported = Notes that could not be imported as note type has changed: { $val }

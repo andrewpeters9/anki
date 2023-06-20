@@ -10,7 +10,7 @@ import shutil
 import traceback
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import anki.lang
 import aqt.forms
@@ -116,6 +116,8 @@ class LoadMetaResult:
 
 
 class ProfileManager:
+    default_answer_keys = {ease_num: str(ease_num) for ease_num in range(1, 5)}
+
     def __init__(self, base: Path) -> None:  #
         "base should be retrieved via ProfileMangager.get_created_base_folder"
         ## Settings which should be forgotten each Anki restart
@@ -518,7 +520,7 @@ create table if not exists profiles
         self.meta["uiScale"] = scale
 
     def reduce_motion(self) -> bool:
-        return self.meta.get("reduce_motion", False)
+        return self.meta.get("reduce_motion", True)
 
     def set_reduce_motion(self, on: bool) -> None:
         self.meta["reduce_motion"] = on
@@ -530,6 +532,18 @@ create table if not exists profiles
     def set_minimalist_mode(self, on: bool) -> None:
         self.meta["minimalist_mode"] = on
         gui_hooks.body_classes_need_update()
+
+    def spacebar_rates_card(self) -> bool:
+        return self.meta.get("spacebar_rates_card", True)
+
+    def set_spacebar_rates_card(self, on: bool) -> None:
+        self.meta["spacebar_rates_card"] = on
+
+    def get_answer_key(self, ease: int) -> Optional[str]:
+        return self.meta.setdefault("answer_keys", self.default_answer_keys).get(ease)
+
+    def set_answer_key(self, ease: int, key: str):
+        self.meta.setdefault("answer_keys", self.default_answer_keys)[ease] = key
 
     def hide_top_bar(self) -> bool:
         return self.meta.get("hide_top_bar", False)
@@ -632,10 +646,10 @@ create table if not exists profiles
         self.profile["hostNum"] = val or 0
 
     def media_syncing_enabled(self) -> bool:
-        return self.profile["syncMedia"]
+        return self.profile.get("syncMedia", True)
 
     def auto_syncing_enabled(self) -> bool:
-        return self.profile["autoSync"]
+        return self.profile.get("autoSync", True)
 
     def sync_auth(self) -> SyncAuth | None:
         if not (hkey := self.profile.get("syncKey")):

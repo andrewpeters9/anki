@@ -210,6 +210,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                 reference={activeImage}
                 offset={20}
                 keepOnKeyup
+                portalTarget={document.body}
                 let:position={positionFloating}
                 on:close={resetHandle}
             >
@@ -227,10 +228,6 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                         on:moveoutend={() => {
                             placeHandle(true);
                             resetHandle();
-                        }}
-                        on:blur={async () => {
-                            await tick();
-                            await resetHandle();
                         }}
                         on:close={resetHandle}
                         let:editor={mathjaxEditor}

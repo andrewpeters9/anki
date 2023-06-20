@@ -7,17 +7,12 @@ use crate::sync::collection::protocol::SyncProtocol;
 use crate::sync::http_client::HttpSyncClient;
 use crate::sync::login::SyncAuth;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SyncStage {
+    #[default]
     Connecting,
     Syncing,
     Finalizing,
-}
-
-impl Default for SyncStage {
-    fn default() -> Self {
-        SyncStage::Connecting
-    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -32,5 +27,3 @@ pub async fn sync_abort(auth: SyncAuth) -> error::Result<()> {
         .await?
         .json()
 }
-
-pub type FullSyncProgressFn = Box<dyn FnMut(FullSyncProgress, bool) + Send + Sync + 'static>;

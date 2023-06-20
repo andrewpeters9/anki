@@ -236,7 +236,9 @@ require("anki/ui").loaded.then(() => require("anki/NoteEditor").instances[0].too
 
                     def on_hotkey() -> None:
                         on_activated()
-                        self.web.eval(f'toggleEditorButton("#{id}");')
+                        self.web.eval(
+                            f'toggleEditorButton(document.getElementById("{id}"));'
+                        )
 
                 else:
                     on_hotkey = on_activated
@@ -509,6 +511,7 @@ require("anki/ui").loaded.then(() => require("anki/NoteEditor").instances[0].too
         collapsed = [fld["collapsed"] for fld in flds]
         plain_texts = [fld.get("plainText", False) for fld in flds]
         descriptions = [fld.get("description", "") for fld in flds]
+        notetype_meta = {"id": self.note.mid, "modTime": self.note.note_type()["mod"]}
 
         self.widget.show()
 
@@ -531,7 +534,7 @@ require("anki/ui").loaded.then(() => require("anki/NoteEditor").instances[0].too
         js = f"""
             saveSession();
             setFields({json.dumps(data)});
-            setNotetypeId({json.dumps(self.note.mid)});
+            setNotetypeMeta({json.dumps(notetype_meta)});
             setCollapsed({json.dumps(collapsed)});
             setPlainTexts({json.dumps(plain_texts)});
             setDescriptions({json.dumps(descriptions)});
@@ -1294,7 +1297,11 @@ class EditorWebView(AnkiWebView):
             return html_content, internal
 
         # favour url if it's a local link
-        if mime.hasUrls() and mime.urls()[0].toString().startswith("file://"):
+        if (
+            mime.hasUrls()
+            and (urls := mime.urls())
+            and urls[0].toString().startswith("file://")
+        ):
             types = (self._processUrls, self._processImage, self._processText)
         else:
             types = (self._processImage, self._processUrls, self._processText)
@@ -1337,6 +1344,7 @@ class EditorWebView(AnkiWebView):
                     processed.append(link)
                 else:
                     token = html.escape(token).replace("\t", " " * 4)
+
                     # if there's more than one consecutive space,
                     # use non-breaking spaces for the second one on
                     def repl(match: Match) -> str:

@@ -148,12 +148,12 @@ class Browser(QMainWindow):
             if self.layoutDirection() == Qt.LayoutDirection.RightToLeft
             else "editor"
         )
-        restoreGeom(self, self._editor_state_key, 0)
+        restoreGeom(self, self._editor_state_key)
         restoreSplitter(self.form.splitter, "editor3")
         restoreState(self, self._editor_state_key)
 
         # responsive layout
-        self.aspect_ratio = self.width() / self.height()
+        self.aspect_ratio = self.width() / self.height() if self.height() != 0 else 0
         self.set_layout(self.mw.pm.browser_layout(), True)
         # disable undo/redo
         self.on_undo_state_change(mw.undo_actions_info())
@@ -234,12 +234,13 @@ class Browser(QMainWindow):
                 self.form.splitter.setOrientation(Qt.Orientation.Horizontal)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
-        aspect_ratio = self.width() / self.height()
+        if self.height() != 0:
+            aspect_ratio = self.width() / self.height()
 
-        if self.auto_layout:
-            self.maybe_update_layout(aspect_ratio)
+            if self.auto_layout:
+                self.maybe_update_layout(aspect_ratio)
 
-        self.aspect_ratio = aspect_ratio
+            self.aspect_ratio = aspect_ratio
 
         QMainWindow.resizeEvent(self, event)
 
@@ -405,7 +406,9 @@ class Browser(QMainWindow):
         self.form.searchEdit.lineEdit().setPlaceholderText(
             tr.browsing_search_bar_hint()
         )
-        self.form.searchEdit.addItems([""] + self.mw.pm.profile["searchHistory"])
+        self.form.searchEdit.addItems(
+            [""] + self.mw.pm.profile.get("searchHistory", [])
+        )
         if search is not None:
             self.search_for_terms(*search)
         else:
@@ -450,7 +453,7 @@ class Browser(QMainWindow):
             showWarning(str(err))
 
     def update_history(self) -> None:
-        sh = self.mw.pm.profile["searchHistory"]
+        sh = self.mw.pm.profile.get("searchHistory", [])
         if self._lastSearchTxt in sh:
             sh.remove(self._lastSearchTxt)
         sh.insert(0, self._lastSearchTxt)
@@ -589,6 +592,7 @@ class Browser(QMainWindow):
         self.form.action_forget.setEnabled(has_selection)
         self.form.actionReposition.setEnabled(has_selection)
         self.form.actionToggle_Suspend.setEnabled(has_selection)
+        self.form.action_toggle_bury.setEnabled(has_selection)
         self.form.menuFlag.setEnabled(has_selection)
 
     def _update_current_actions(self) -> None:

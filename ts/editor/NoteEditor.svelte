@@ -48,6 +48,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import Absolute from "../components/Absolute.svelte";
     import Badge from "../components/Badge.svelte";
     import { TagEditor } from "../tag-editor";
+    import { commitTagEdits } from "../tag-editor/TagInput.svelte";
     import { ChangeTimer } from "./change-timer";
     import { clearableArray } from "./destroyable";
     import DuplicateLink from "./DuplicateLink.svelte";
@@ -59,6 +60,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import ImageOverlay from "./image-overlay";
     import { shrinkImagesByDefault } from "./image-overlay/ImageOverlay.svelte";
     import MathjaxOverlay from "./mathjax-overlay";
+    import { closeMathjaxEditor } from "./mathjax-overlay/MathjaxEditor.svelte";
     import Notification from "./Notification.svelte";
     import PlainTextInput from "./plain-text-input";
     import { closeHTMLTags } from "./plain-text-input/PlainTextInput.svelte";
@@ -66,7 +68,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import RichTextInput, { editingInputIsRichText } from "./rich-text-input";
     import RichTextBadge from "./RichTextBadge.svelte";
     import SymbolsOverlay from "./symbols-overlay";
-    import type { SessionOptions } from "./types";
+    import type { NotetypeIdAndModTime, SessionOptions } from "./types";
 
     function quoteFontFamily(fontFamily: string): string {
         // generic families (e.g. sans-serif) must not be quoted
@@ -81,14 +83,15 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
     const sessionOptions: SessionOptions = {};
     export function saveSession(): void {
-        if (notetypeId) {
-            sessionOptions[notetypeId] = {
+        if (notetypeMeta) {
+            sessionOptions[notetypeMeta.id] = {
                 fieldsCollapsed,
                 fieldStates: {
                     richTextsHidden,
                     plainTextsHidden,
                     plainTextDefaults,
                 },
+                modTimeOfNotetype: notetypeMeta.modTime,
             };
         }
     }
@@ -131,7 +134,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     let fieldsCollapsed: boolean[] = [];
     export function setCollapsed(defaultCollapsed: boolean[]): void {
         fieldsCollapsed =
-            sessionOptions[notetypeId!]?.fieldsCollapsed ?? defaultCollapsed;
+            sessionOptions[notetypeMeta?.id]?.fieldsCollapsed ?? defaultCollapsed;
     }
 
     let richTextsHidden: boolean[] = [];
@@ -139,7 +142,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     let plainTextDefaults: boolean[] = [];
 
     export function setPlainTexts(defaultPlainTexts: boolean[]): void {
-        const states = sessionOptions[notetypeId!]?.fieldStates;
+        const states = sessionOptions[notetypeMeta?.id]?.fieldStates;
         if (states) {
             richTextsHidden = states.richTextsHidden;
             plainTextsHidden = states.plainTextsHidden;
@@ -222,9 +225,13 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         noteId = ntid;
     }
 
-    let notetypeId: number | null = null;
-    export function setNotetypeId(mid: number): void {
-        notetypeId = mid;
+    let notetypeMeta: NotetypeIdAndModTime;
+    function setNotetypeMeta({ id, modTime }: NotetypeIdAndModTime): void {
+        notetypeMeta = { id, modTime };
+        // Discard the saved state of the fields if the notetype has been modified.
+        if (sessionOptions[id]?.modTimeOfNotetype !== modTime) {
+            delete sessionOptions[id];
+        }
     }
 
     let insertSymbols = false;
@@ -280,9 +287,15 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         );
     }
 
-    export function saveFieldNow(): void {
+    function saveFieldNow(): void {
         /* this will always be a key save */
         fieldSave.fireImmediately();
+    }
+
+    function saveNow(): void {
+        closeMathjaxEditor?.();
+        $commitTagEdits();
+        saveFieldNow();
     }
 
     export function saveOnPageHide() {
@@ -311,6 +324,41 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     let plainTextInputs: PlainTextInput[] = [];
     $: plainTextInputs = plainTextInputs.filter(Boolean);
 
+    function toggleRichTextInput(index: number): void {
+        const hidden = !richTextsHidden[index];
+        richTextInputs[index].focusFlag.setFlag(!hidden);
+        richTextsHidden[index] = hidden;
+        if (hidden) {
+            plainTextInputs[index].api.refocus();
+        }
+    }
+
+    function togglePlainTextInput(index: number): void {
+        const hidden = !plainTextsHidden[index];
+        plainTextInputs[index].focusFlag.setFlag(!hidden);
+        plainTextsHidden[index] = hidden;
+        if (hidden) {
+            richTextInputs[index].api.refocus();
+        }
+    }
+
+    function toggleField(index: number): void {
+        const collapsed = !fieldsCollapsed[index];
+        fieldsCollapsed[index] = collapsed;
+
+        const defaultInput = !plainTextDefaults[index]
+            ? richTextInputs[index]
+            : plainTextInputs[index];
+
+        if (!collapsed) {
+            defaultInput.api.refocus();
+        } else if (!plainTextDefaults[index]) {
+            plainTextsHidden[index] = true;
+        } else {
+            richTextsHidden[index] = true;
+        }
+    }
+
     const toolbar: Partial<EditorToolbarAPI> = {};
 
     function setShrinkImages(shrinkByDefault: boolean) {
@@ -321,12 +369,20 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         $closeHTMLTags = closeTags;
     }
 
+    /**
+     * Enable/Disable add-on buttons that do not have the `perm` class
+     */
+    function setAddonButtonsDisabled(disabled: boolean): void {
+        document.querySelectorAll("button.linkb:not(.perm)").forEach((button) => {
+            (button as HTMLButtonElement).disabled = disabled;
+        });
+    }
+
     import { wrapInternal } from "@tslib/wrap";
     import Shortcut from "components/Shortcut.svelte";
 
     import { mathjaxConfig } from "../editable/mathjax-element";
     import CollapseLabel from "./CollapseLabel.svelte";
-    import { refocusInput } from "./helpers";
     import * as oldEditorAdapter from "./old-editor-adapter";
 
     onMount(() => {
@@ -352,11 +408,11 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             setTagsCollapsed,
             setBackgrounds,
             setClozeHint,
-            saveNow: saveFieldNow,
+            saveNow,
             focusIfField,
             getNoteId,
             setNoteId,
-            setNotetypeId,
+            setNotetypeMeta,
             wrap,
             setMathjaxEnabled,
             setInsertSymbolsEnabled,
@@ -408,9 +464,9 @@ the AddCards dialog) should be implemented in the user of this component.
     {#if hint}
         <Absolute bottom right --margin="10px">
             <Notification>
-                <Badge --badge-color="tomato" --icon-align="top"
-                    >{@html alertIcon}</Badge
-                >
+                <Badge --badge-color="tomato" --icon-align="top">
+                    {@html alertIcon}
+                </Badge>
                 <span>{@html hint}</span>
             </Notification>
         </Absolute>
@@ -427,10 +483,12 @@ the AddCards dialog) should be implemented in the user of this component.
                 api={fields[index]}
                 on:focusin={() => {
                     $focusedField = fields[index];
+                    setAddonButtonsDisabled(false);
                     bridgeCommand(`focus:${index}`);
                 }}
                 on:focusout={() => {
                     $focusedField = null;
+                    setAddonButtonsDisabled(true);
                     bridgeCommand(
                         `blur:${index}:${getNoteId()}:${transformContentBeforeSave(
                             get(content),
@@ -451,21 +509,7 @@ the AddCards dialog) should be implemented in the user of this component.
                 <svelte:fragment slot="field-label">
                     <LabelContainer
                         collapsed={fieldsCollapsed[index]}
-                        on:toggle={async () => {
-                            fieldsCollapsed[index] = !fieldsCollapsed[index];
-
-                            const defaultInput = !plainTextDefaults[index]
-                                ? richTextInputs[index]
-                                : plainTextInputs[index];
-
-                            if (!fieldsCollapsed[index]) {
-                                refocusInput(defaultInput.api);
-                            } else if (!plainTextDefaults[index]) {
-                                plainTextsHidden[index] = true;
-                            } else {
-                                richTextsHidden[index] = true;
-                            }
-                        }}
+                        on:toggle={() => toggleField(index)}
                         --icon-align="bottom"
                     >
                         <svelte:fragment slot="field-name">
@@ -483,14 +527,7 @@ the AddCards dialog) should be implemented in the user of this component.
                                         (fields[index] === $hoveredField ||
                                             fields[index] === $focusedField)}
                                     bind:off={richTextsHidden[index]}
-                                    on:toggle={async () => {
-                                        richTextsHidden[index] =
-                                            !richTextsHidden[index];
-
-                                        if (!richTextsHidden[index]) {
-                                            refocusInput(richTextInputs[index].api);
-                                        }
-                                    }}
+                                    on:toggle={() => toggleRichTextInput(index)}
                                 />
                             {:else}
                                 <PlainTextBadge
@@ -498,14 +535,7 @@ the AddCards dialog) should be implemented in the user of this component.
                                         (fields[index] === $hoveredField ||
                                             fields[index] === $focusedField)}
                                     bind:off={plainTextsHidden[index]}
-                                    on:toggle={async () => {
-                                        plainTextsHidden[index] =
-                                            !plainTextsHidden[index];
-
-                                        if (!plainTextsHidden[index]) {
-                                            refocusInput(plainTextInputs[index].api);
-                                        }
-                                    }}
+                                    on:toggle={() => togglePlainTextInput(index)}
                                 />
                             {/if}
                             <slot

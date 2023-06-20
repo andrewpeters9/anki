@@ -1,6 +1,8 @@
 # Copyright: Ankitects Pty Ltd and contributors
 # License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+import functools
+import re
 from typing import Any, cast
 
 import anki.lang
@@ -9,7 +11,7 @@ import aqt.forms
 import aqt.operations
 from anki.collection import OpChanges
 from anki.consts import new_card_scheduling_labels
-from aqt import AnkiQt
+from aqt import AnkiQt, gui_hooks
 from aqt.operations.collection import set_preferences
 from aqt.profiles import VideoDriver
 from aqt.qt import *
@@ -46,7 +48,36 @@ class Preferences(QDialog):
         self.setup_collection()
         self.setup_profile()
         self.setup_global()
+        self.setup_configurable_answer_keys()
         self.show()
+
+    def setup_configurable_answer_keys(self):
+        """
+        Create a group box in Preferences with widgets that let the user edit answer keys.
+        """
+        ease_labels = (
+            (1, tr.studying_again()),
+            (2, tr.studying_hard()),
+            (3, tr.studying_good()),
+            (4, tr.studying_easy()),
+        )
+        group = self.form.preferences_answer_keys
+        group.setLayout(layout := QFormLayout())
+        for ease, label in ease_labels:
+            layout.addRow(
+                label,
+                line_edit := QLineEdit(self.mw.pm.get_answer_key(ease) or ""),
+            )
+            qconnect(
+                line_edit.textChanged,
+                functools.partial(self.mw.pm.set_answer_key, ease),
+            )
+            line_edit.setValidator(
+                QRegularExpressionValidator(
+                    QRegularExpression(r"^[a-z0-9\]\[=,./;\'\\-]$")
+                )
+            )
+            line_edit.setPlaceholderText(tr.preferences_shortcut_placeholder())
 
     def accept(self) -> None:
         # avoid exception if main window is already closed
@@ -150,6 +181,7 @@ class Preferences(QDialog):
                 want_v3 = form.sched2021.isChecked()
                 if self.mw.col.v3_scheduler() != want_v3:
                     self.mw.col.set_v3_scheduler(want_v3)
+                    gui_hooks.operation_did_execute(OpChanges(study_queues=True), None)
 
             on_done()
 
@@ -173,10 +205,10 @@ class Preferences(QDialog):
     def setup_network(self) -> None:
         self.form.media_log.setText(tr.sync_media_log_button())
         qconnect(self.form.media_log.clicked, self.on_media_log)
-        self.form.syncOnProgramOpen.setChecked(self.prof["autoSync"])
-        self.form.syncMedia.setChecked(self.prof["syncMedia"])
+        self.form.syncOnProgramOpen.setChecked(self.mw.pm.auto_syncing_enabled())
+        self.form.syncMedia.setChecked(self.mw.pm.media_syncing_enabled())
         self.form.autoSyncMedia.setChecked(self.mw.pm.auto_sync_media_minutes() != 0)
-        if not self.prof["syncKey"]:
+        if not self.prof.get("syncKey"):
             self._hide_sync_auth_settings()
         else:
             self.form.syncUser.setText(self.prof.get("syncUser", ""))
@@ -224,6 +256,12 @@ class Preferences(QDialog):
 
         self.form.minimalist_mode.setChecked(self.mw.pm.minimalist_mode())
         qconnect(self.form.minimalist_mode.stateChanged, self.mw.pm.set_minimalist_mode)
+
+        self.form.spacebar_rates_card.setChecked(self.mw.pm.spacebar_rates_card())
+        qconnect(
+            self.form.spacebar_rates_card.stateChanged,
+            self.mw.pm.set_spacebar_rates_card,
+        )
 
         hide_choices = [tr.preferences_full_screen_only(), tr.preferences_always()]
 
@@ -304,9 +342,9 @@ class Preferences(QDialog):
         self.mw.set_theme(Theme(index))
 
     def on_reset_window_sizes(self) -> None:
-        suffixes = ["Geom", "State", "Splitter"]
+        regexp = re.compile(r"(Geom(etry)?|State|Splitter|Header)(\d+.\d+)?$")
         for key in list(self.prof.keys()):
-            if any(key.endswith(suffix) for suffix in suffixes):
+            if regexp.search(key):
                 del self.prof[key]
         showInfo(tr.preferences_reset_window_sizes_complete())
 

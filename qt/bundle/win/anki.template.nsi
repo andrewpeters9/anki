@@ -1,12 +1,18 @@
 ;; This installer was written many years ago, and it is probably worth investigating modern
-;; installer alternatives. 
+;; installer alternatives at one point.
+
+!addplugindir .
 
 !include "fileassoc.nsh"
 !include WinVer.nsh
 !include x64.nsh
-; must be installed into NSIS install location
-; can be found on https://github.com/ankitects/anki-bundle-extras/releases/tag/anki-2022-02-09
-!include nsProcess.nsh
+
+!define nsProcess::FindProcess `!insertmacro nsProcess::FindProcess`
+
+!macro nsProcess::FindProcess _FILE _ERR
+	nsProcess::_FindProcess /NOUNLOAD `${_FILE}`
+	Pop ${_ERR}
+!macroend
 
 ;--------------------------------
 
@@ -20,11 +26,14 @@ Unicode true
 ; The file to write (make relative to repo root instead of out/bundle)
 OutFile "..\..\@@INSTALLER@@"
 
+; Non elevated
+RequestExecutionLevel user
+
 ; The default installation directory
-InstallDir "$PROGRAMFILES64\Anki"
+InstallDir "$LOCALAPPDATA\Programs\Anki"
 
 ; Remember the install location
-InstallDirRegKey HKLM "Software\Anki" "Install_Dir64"
+InstallDirRegKey HKCU "Software\Anki" "Install_Dir64"
 
 AllowSkipFiles off
 
@@ -127,10 +136,51 @@ FunctionEnd
 
 ;--------------------------------
 
+; Macro from fileassoc changed to work non elevated
+!macro APP_ASSOCIATE_HKCU EXT FILECLASS DESCRIPTION ICON COMMANDTEXT COMMAND
+  ; Backup the previously associated file class
+  ReadRegStr $R0 HKCU "Software\Classes\.${EXT}" ""
+  WriteRegStr HKCU "Software\Classes\.${EXT}" "${FILECLASS}_backup" "$R0"
+ 
+  WriteRegStr HKCU "Software\Classes\.${EXT}" "" "${FILECLASS}"
+ 
+  WriteRegStr HKCU "Software\Classes\${FILECLASS}" "" `${DESCRIPTION}`
+  WriteRegStr HKCU "Software\Classes\${FILECLASS}\DefaultIcon" "" `${ICON}`
+  WriteRegStr HKCU "Software\Classes\${FILECLASS}\shell" "" "open"
+  WriteRegStr HKCU "Software\Classes\${FILECLASS}\shell\open" "" `${COMMANDTEXT}`
+  WriteRegStr HKCU "Software\Classes\${FILECLASS}\shell\open\command" "" `${COMMAND}`
+!macroend
+
+; Macro from fileassoc changed to work non elevated
+!macro APP_UNASSOCIATE_HKCU EXT FILECLASS
+  ; Backup the previously associated file class
+  ReadRegStr $R0 HKCU "Software\Classes\.${EXT}" `${FILECLASS}_backup`
+  WriteRegStr HKCU "Software\Classes\.${EXT}" "" "$R0"
+ 
+  DeleteRegKey HKCU `Software\Classes\${FILECLASS}`
+!macroend
+
 ; The stuff to install
 Section ""
 
-  SetShellVarContext all
+  SetShellVarContext current
+
+  ; "Upgrade" from elevated anki
+  ReadRegStr $0 HKLM "Software\WOW6432Node\Anki" "Install_Dir64"
+  ${IF} $0 != ""
+      ; old value exists, we want to inform the user that a manual uninstall is required first and then start the uninstall.exe
+      MessageBox MB_ICONEXCLAMATION|MB_OK "A previous Anki version needs to be uninstalled first. After uninstallation completes, please run this installer again."
+      ClearErrors
+      ExecShell "open" "$0\uninstall.exe"
+      IfErrors shellError
+      Quit
+  ${ELSE}
+      goto notOldUpgrade
+  ${ENDIF}
+
+  shellError:
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Failed to uninstall the old version of Anki. Proceeding with installation."
+  notOldUpgrade:
 
   Call removeManifestFiles
 
@@ -144,29 +194,30 @@ Section ""
   File /r ..\..\@@SRC@@\*.*
   !endif
 
-  !insertmacro APP_ASSOCIATE "apkg" "anki.apkg" \
+  !insertmacro APP_ASSOCIATE_HKCU "apkg" "anki.apkg" \
     "Anki deck package" "$INSTDIR\anki.exe,0" \
     "Open with Anki" "$INSTDIR\anki.exe $\"%L$\""
   
-  !insertmacro APP_ASSOCIATE "colpkg" "anki.colpkg" \
+  !insertmacro APP_ASSOCIATE_HKCU "colpkg" "anki.colpkg" \
     "Anki collection package" "$INSTDIR\anki.exe,0" \
     "Open with Anki" "$INSTDIR\anki.exe $\"%L$\""
 
-  !insertmacro APP_ASSOCIATE "ankiaddon" "anki.ankiaddon" \
+  !insertmacro APP_ASSOCIATE_HKCU "ankiaddon" "anki.ankiaddon" \
     "Anki add-on" "$INSTDIR\anki.exe,0" \
     "Open with Anki" "$INSTDIR\anki.exe $\"%L$\""
 
   !insertmacro UPDATEFILEASSOC
 
   ; Write the installation path into the registry
-  WriteRegStr HKLM Software\Anki "Install_Dir64" "$INSTDIR"
+  ; WriteRegStr HKLM Software\Anki "Install_Dir64" "$INSTDIR"
+  WriteRegStr HKCU Software\Anki "Install_Dir64" "$INSTDIR"
 
   ; Write the uninstall keys for Windows
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "DisplayName" "Anki"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "DisplayVersion" "@@VERSION@@"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "UninstallString" '"$INSTDIR\uninstall.exe"'
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "NoModify" 1
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "NoRepair" 1
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "DisplayName" "Anki"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "DisplayVersion" "@@VERSION@@"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "UninstallString" '"$INSTDIR\uninstall.exe"'
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "NoModify" 1
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki" "NoRepair" 1
 
   !ifdef WRITE_UNINSTALLER
   WriteUninstaller "uninstall.exe"
@@ -186,7 +237,7 @@ functionEnd
 
 Section "Uninstall"
 
-  SetShellVarContext all
+  SetShellVarContext current
 
   Call un.removeManifestFiles
 
@@ -195,16 +246,16 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\Anki.lnk"
 
   ; associations
-  !insertmacro APP_UNASSOCIATE "apkg" "anki.apkg"
-  !insertmacro APP_UNASSOCIATE "colpkg" "anki.colpkg"
-  !insertmacro APP_UNASSOCIATE "ankiaddon" "anki.ankiaddon"
+  !insertmacro APP_UNASSOCIATE_HKCU "apkg" "anki.apkg"
+  !insertmacro APP_UNASSOCIATE_HKCU "colpkg" "anki.colpkg"
+  !insertmacro APP_UNASSOCIATE_HKCU "ankiaddon" "anki.ankiaddon"
   !insertmacro UPDATEFILEASSOC
 
   ; try to remove top level folder if empty
   RMDir "$INSTDIR"
 
   ; Remove registry keys
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki"
-  DeleteRegKey HKLM Software\Anki
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Anki"
+  DeleteRegKey HKCU Software\Anki
 
 SectionEnd

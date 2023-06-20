@@ -2,7 +2,6 @@
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
 mod db;
-mod file_io;
 mod filtered;
 mod invalid_input;
 pub(crate) mod network;
@@ -11,6 +10,9 @@ mod search;
 #[cfg(windows)]
 pub mod windows;
 
+use anki_i18n::I18n;
+use anki_io::FileIoError;
+use anki_io::FileOp;
 pub use db::DbError;
 pub use db::DbErrorKind;
 pub use filtered::CustomStudyError;
@@ -23,14 +25,11 @@ pub use search::ParseError;
 pub use search::SearchErrorKind;
 use snafu::Snafu;
 
-pub use self::file_io::FileIoError;
-pub use self::file_io::FileIoSnafu;
-pub use self::file_io::FileOp;
 pub use self::invalid_input::InvalidInputError;
 pub use self::invalid_input::OrInvalid;
 pub use self::not_found::NotFoundError;
 pub use self::not_found::OrNotFound;
-use crate::i18n::I18n;
+use crate::import_export::ImportError;
 use crate::links::HelpPage;
 
 pub type Result<T, E = AnkiError> = std::result::Result<T, E>;
@@ -112,6 +111,8 @@ pub enum AnkiError {
     WindowsError {
         source: windows::WindowsError,
     },
+    InvalidMethodIndex,
+    InvalidServiceIndex,
 }
 
 // error helpers
@@ -150,13 +151,15 @@ impl AnkiError {
             AnkiError::CustomStudyError { source } => source.message(tr),
             AnkiError::ImportError { source } => source.message(tr),
             AnkiError::Deleted => tr.browsing_row_deleted().into(),
-            AnkiError::InvalidId => tr.errors_invalid_ids().into(),
+            AnkiError::InvalidId => tr.errors_please_check_database().into(),
             AnkiError::JsonError { .. }
             | AnkiError::ProtoError { .. }
             | AnkiError::Interrupted
             | AnkiError::CollectionNotOpen
             | AnkiError::CollectionAlreadyOpen
             | AnkiError::Existing
+            | AnkiError::InvalidServiceIndex
+            | AnkiError::InvalidMethodIndex
             | AnkiError::UndoEmpty => format!("{:?}", self),
             AnkiError::FileIoError { source } => source.message(),
             AnkiError::InvalidInput { source } => source.message(),
@@ -298,26 +301,4 @@ pub enum CardTypeErrorDetails {
     NoSuchField,
     MissingCloze,
     ExtraneousCloze,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Snafu)]
-pub enum ImportError {
-    Corrupt,
-    TooNew,
-    MediaImportFailed { info: String },
-    NoFieldColumn,
-}
-
-impl ImportError {
-    fn message(&self, tr: &I18n) -> String {
-        match self {
-            ImportError::Corrupt => tr.importing_the_provided_file_is_not_a(),
-            ImportError::TooNew => tr.errors_collection_too_new(),
-            ImportError::MediaImportFailed { info } => {
-                tr.importing_failed_to_import_media_file(info)
-            }
-            ImportError::NoFieldColumn => tr.importing_file_must_contain_field_column(),
-        }
-        .into()
-    }
 }

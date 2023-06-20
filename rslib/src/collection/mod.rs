@@ -11,14 +11,18 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
+
+use anki_i18n::I18n;
+use anki_io::create_dir_all;
 
 use crate::browser_table;
 use crate::decks::Deck;
 use crate::decks::DeckId;
 use crate::error::Result;
-use crate::i18n::I18n;
 use crate::notetype::Notetype;
 use crate::notetype::NotetypeId;
+use crate::progress::ProgressState;
 use crate::scheduler::queue::CardQueues;
 use crate::scheduler::SchedulerInfo;
 use crate::storage::SchemaVersion;
@@ -37,6 +41,7 @@ pub struct CollectionBuilder {
     check_integrity: bool,
     // temporary option for AnkiDroid
     force_schema11: Option<bool>,
+    progress_handler: Option<Arc<Mutex<ProgressState>>>,
 }
 
 impl CollectionBuilder {
@@ -48,7 +53,7 @@ impl CollectionBuilder {
         builder
     }
 
-    pub fn build(&self) -> Result<Collection> {
+    pub fn build(&mut self) -> Result<Collection> {
         let col_path = self
             .collection_path
             .clone()
@@ -72,7 +77,10 @@ impl CollectionBuilder {
             media_db,
             tr,
             server,
-            state: CollectionState::default(),
+            state: CollectionState {
+                progress: self.progress_handler.clone().unwrap_or_default(),
+                ..Default::default()
+            },
         };
 
         Ok(col)
@@ -87,6 +95,17 @@ impl CollectionBuilder {
         self.media_folder = Some(media_folder.into());
         self.media_db = Some(media_db.into());
         self
+    }
+
+    /// For a `foo.anki2` file, use `foo.media` and `foo.mdb`. Mobile clients
+    /// use different paths, so the backend must continue to use
+    /// [set_media_paths].
+    pub fn with_desktop_media_paths(&mut self) -> &mut Self {
+        let col_path = self.collection_path.as_ref().unwrap();
+        let media_folder = col_path.with_extension("media");
+        create_dir_all(&media_folder).expect("creating media folder");
+        let media_db = col_path.with_extension("mdb");
+        self.set_media_paths(media_folder, media_db)
     }
 
     pub fn set_server(&mut self, server: bool) -> &mut Self {
@@ -108,11 +127,13 @@ impl CollectionBuilder {
         self.check_integrity = check_integrity;
         self
     }
-}
 
-#[cfg(test)]
-pub fn open_test_collection() -> Collection {
-    CollectionBuilder::default().build().unwrap()
+    /// If provided, progress info will be written to the provided mutex, and
+    /// can be tracked on a separate thread.
+    pub fn set_shared_progress_state(&mut self, state: Arc<Mutex<ProgressState>>) -> &mut Self {
+        self.progress_handler = Some(state);
+        self
+    }
 }
 
 #[derive(Debug, Default)]
@@ -129,11 +150,11 @@ pub struct CollectionState {
     /// The modification time at the last backup, so we don't create multiple
     /// identical backups.
     pub(crate) last_backup_modified: Option<TimestampMillis>,
+    pub(crate) progress: Arc<Mutex<ProgressState>>,
 }
 
 pub struct Collection {
     pub storage: SqliteStorage,
-    #[allow(dead_code)]
     pub(crate) col_path: PathBuf,
     pub(crate) media_folder: PathBuf,
     pub(crate) media_db: PathBuf,

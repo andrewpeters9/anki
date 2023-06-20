@@ -4,18 +4,27 @@
 mod addupdate;
 mod counts;
 mod current;
-mod filtered;
+pub mod filtered;
 pub(crate) mod limits;
 mod name;
 mod remove;
 mod reparent;
 mod schema11;
+mod service;
 mod stats;
-mod tree;
+pub mod tree;
 pub(crate) mod undo;
 
 use std::sync::Arc;
 
+pub use anki_proto::decks::deck::filtered::search_term::Order as FilteredSearchOrder;
+pub use anki_proto::decks::deck::filtered::SearchTerm as FilteredSearchTerm;
+pub use anki_proto::decks::deck::kind_container::Kind as DeckKind;
+pub use anki_proto::decks::deck::Common as DeckCommon;
+pub use anki_proto::decks::deck::Filtered as FilteredDeck;
+pub use anki_proto::decks::deck::KindContainer as DeckKindContainer;
+pub use anki_proto::decks::deck::Normal as NormalDeck;
+pub use anki_proto::decks::Deck as DeckProto;
 pub(crate) use counts::DueCounts;
 pub(crate) use name::immediate_parent_name;
 pub use name::NativeDeckName;
@@ -24,14 +33,6 @@ pub use schema11::DeckSchema11;
 use crate::define_newtype;
 use crate::error::FilteredDeckError;
 use crate::markdown::render_markdown;
-pub use crate::pb::decks::deck::filtered::search_term::Order as FilteredSearchOrder;
-pub use crate::pb::decks::deck::filtered::SearchTerm as FilteredSearchTerm;
-pub use crate::pb::decks::deck::kind_container::Kind as DeckKind;
-pub use crate::pb::decks::deck::Common as DeckCommon;
-pub use crate::pb::decks::deck::Filtered as FilteredDeck;
-pub use crate::pb::decks::deck::KindContainer as DeckKindContainer;
-pub use crate::pb::decks::deck::Normal as NormalDeck;
-pub use crate::pb::decks::Deck as DeckProto;
 use crate::prelude::*;
 use crate::text::sanitize_html_no_images;
 
@@ -177,7 +178,7 @@ impl Collection {
 
     /// Get a deck based on its human name. If you have a machine name,
     /// use the method in storage instead.
-    pub(crate) fn get_deck_id(&self, human_name: &str) -> Result<Option<DeckId>> {
+    pub fn get_deck_id(&self, human_name: &str) -> Result<Option<DeckId>> {
         self.storage
             .get_deck_id(NativeDeckName::from_human_name(human_name).as_native_str())
     }
@@ -185,7 +186,6 @@ impl Collection {
 
 #[cfg(test)]
 mod test {
-    use crate::collection::open_test_collection;
     use crate::prelude::*;
     use crate::search::SortMode;
 
@@ -200,7 +200,7 @@ mod test {
 
     #[test]
     fn adding_updating() -> Result<()> {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         let deck1 = col.get_or_create_normal_deck("foo")?;
         let deck2 = col.get_or_create_normal_deck("FOO")?;
@@ -220,7 +220,7 @@ mod test {
 
     #[test]
     fn renaming() -> Result<()> {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         let _ = col.get_or_create_normal_deck("foo::bar::baz")?;
         let mut top_deck = col.get_or_create_normal_deck("foo")?;
@@ -291,7 +291,7 @@ mod test {
     fn default() -> Result<()> {
         // deleting the default deck will remove cards, but bring the deck back
         // as a top level deck
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         let mut default = col.get_or_create_normal_deck("default")?;
         default.name = NativeDeckName::from_native_str("one\x1ftwo");

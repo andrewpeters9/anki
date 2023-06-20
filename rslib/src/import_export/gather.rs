@@ -4,14 +4,14 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use anki_io::filename_is_safe;
 use itertools::Itertools;
 
 use super::ExportProgress;
-use super::IncrementableProgress;
 use crate::decks::immediate_parent_name;
-use crate::io::filename_is_safe;
 use crate::latex::extract_latex;
 use crate::prelude::*;
+use crate::progress::ThrottlingProgressHandler;
 use crate::revlog::RevlogEntry;
 use crate::search::CardTableGuard;
 use crate::search::NoteTableGuard;
@@ -61,7 +61,7 @@ impl ExchangeData {
 
     pub(super) fn gather_media_names(
         &mut self,
-        progress: &mut IncrementableProgress<ExportProgress>,
+        progress: &mut ThrottlingProgressHandler<ExportProgress>,
     ) -> Result<()> {
         let mut inserter = |name: String| {
             if filename_is_safe(&name) {
@@ -270,13 +270,12 @@ impl Collection {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::collection::open_test_collection;
     use crate::search::SearchNode;
 
     #[test]
     fn should_gather_valid_notes() {
         let mut data = ExchangeData::default();
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         let note = NoteAdder::basic(&mut col).add(&mut col);
         data.gather_data(&mut col, SearchNode::WholeCollection, true)
@@ -288,7 +287,7 @@ mod test {
     #[test]
     fn should_err_if_note_has_invalid_id() {
         let mut data = ExchangeData::default();
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let now_micros = TimestampMillis::now().0 * 1000;
 
         let mut note = NoteAdder::basic(&mut col).add(&mut col);

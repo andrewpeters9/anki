@@ -7,32 +7,30 @@ use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 
+use anki_io::open_file;
+
 use crate::import_export::text::csv::metadata::CsvDeck;
 use crate::import_export::text::csv::metadata::CsvMetadata;
+use crate::import_export::text::csv::metadata::CsvMetadataHelpers;
 use crate::import_export::text::csv::metadata::CsvNotetype;
+use crate::import_export::text::csv::metadata::DelimeterExt;
 use crate::import_export::text::csv::metadata::Delimiter;
 use crate::import_export::text::ForeignData;
 use crate::import_export::text::ForeignNote;
 use crate::import_export::text::NameOrId;
-use crate::import_export::ImportProgress;
 use crate::import_export::NoteLog;
-use crate::io::open_file;
 use crate::prelude::*;
 use crate::text::strip_utf8_bom;
 
 impl Collection {
-    pub fn import_csv(
-        &mut self,
-        path: &str,
-        metadata: CsvMetadata,
-        progress_fn: impl 'static + FnMut(ImportProgress, bool) -> bool,
-    ) -> Result<OpOutput<NoteLog>> {
+    pub fn import_csv(&mut self, path: &str, metadata: CsvMetadata) -> Result<OpOutput<NoteLog>> {
+        let progress = self.new_progress_handler();
         let file = open_file(path)?;
         let mut ctx = ColumnContext::new(&metadata)?;
         let notes = ctx.deserialize_csv(file, metadata.delimiter())?;
         let mut data = ForeignData::from(metadata);
         data.notes = notes;
-        data.import(self, progress_fn)
+        data.import(self, progress)
     }
 }
 
@@ -53,34 +51,12 @@ impl From<CsvMetadata> for ForeignData {
     }
 }
 
-impl CsvMetadata {
-    fn deck(&self) -> Result<&CsvDeck> {
-        self.deck.as_ref().or_invalid("deck oneof not set")
-    }
-
-    fn notetype(&self) -> Result<&CsvNotetype> {
-        self.notetype.as_ref().or_invalid("notetype oneof not set")
-    }
-
-    fn field_source_columns(&self) -> Result<FieldSourceColumns> {
-        Ok(match self.notetype()? {
-            CsvNotetype::GlobalNotetype(global) => global
-                .field_columns
-                .iter()
-                .map(|&i| (i > 0).then_some(i as usize))
-                .collect(),
-            CsvNotetype::NotetypeColumn(_) => {
-                let meta_columns = self.meta_columns();
-                (1..self.column_labels.len() + 1)
-                    .filter(|idx| !meta_columns.contains(idx))
-                    .map(Some)
-                    .collect()
-            }
-        })
-    }
+trait CsvDeckExt {
+    fn name_or_id(&self) -> NameOrId;
+    fn column(&self) -> Option<usize>;
 }
 
-impl CsvDeck {
+impl CsvDeckExt for CsvDeck {
     fn name_or_id(&self) -> NameOrId {
         match self {
             Self::DeckId(did) => NameOrId::Id(*did),
@@ -96,7 +72,12 @@ impl CsvDeck {
     }
 }
 
-impl CsvNotetype {
+trait CsvNotetypeExt {
+    fn name_or_id(&self) -> NameOrId;
+    fn column(&self) -> Option<usize>;
+}
+
+impl CsvNotetypeExt for CsvNotetype {
     fn name_or_id(&self) -> NameOrId {
         match self {
             Self::GlobalNotetype(nt) => NameOrId::Id(nt.id),
@@ -113,7 +94,7 @@ impl CsvNotetype {
 }
 
 /// Column indices for the fields of a notetype.
-type FieldSourceColumns = Vec<Option<usize>>;
+pub(super) type FieldSourceColumns = Vec<Option<usize>>;
 
 // Column indices are 1-based.
 struct ColumnContext {
@@ -155,7 +136,6 @@ impl ColumnContext {
     ) -> Result<Vec<ForeignNote>> {
         reader
             .records()
-            .into_iter()
             .map(|res| {
                 res.or_invalid("invalid csv")
                     .map(|record| self.foreign_note_from_record(&record))
@@ -245,8 +225,10 @@ fn remove_tags_line_from_reader(reader: &mut (impl Read + Seek)) -> Result<()> {
 mod test {
     use std::io::Cursor;
 
+    use anki_proto::import_export::csv_metadata::MappedNotetype;
+
+    use super::super::metadata::test::CsvMetadataTestExt;
     use super::*;
-    use crate::pb::import_export::csv_metadata::MappedNotetype;
 
     macro_rules! import {
         ($metadata:expr, $csv:expr) => {{
@@ -275,30 +257,6 @@ mod test {
                 assert_eq!(&field.as_ref().map(String::as_str), expected);
             }
         };
-    }
-
-    impl CsvMetadata {
-        fn defaults_for_testing() -> Self {
-            Self {
-                delimiter: Delimiter::Comma as i32,
-                force_delimiter: false,
-                is_html: false,
-                force_is_html: false,
-                tags_column: 0,
-                guid_column: 0,
-                global_tags: Vec::new(),
-                updated_tags: Vec::new(),
-                column_labels: vec!["".to_string(); 2],
-                deck: Some(CsvDeck::DeckId(1)),
-                notetype: Some(CsvNotetype::GlobalNotetype(MappedNotetype {
-                    id: 1,
-                    field_columns: vec![1, 2],
-                })),
-                preview: Vec::new(),
-                dupe_resolution: 0,
-                match_scope: 0,
-            }
-        }
     }
 
     #[test]

@@ -476,7 +476,7 @@ class AnkiQt(QMainWindow):
         self.setup_sound()
         self.flags = FlagManager(self)
         # show main window
-        if self.pm.profile["mainWindowState"]:
+        if self.pm.profile.get("mainWindowState"):
             restoreGeom(self, "mainWindow")
             restoreState(self, "mainWindow")
         # titlebar
@@ -687,8 +687,9 @@ class AnkiQt(QMainWindow):
 
     def maybeOptimize(self) -> None:
         # have two weeks passed?
-        if (int_time() - self.pm.profile["lastOptimize"]) < 86400 * 14:
-            return
+        if (last_optimize := self.pm.profile.get("lastOptimize")) is not None:
+            if (int_time() - last_optimize) < 86400 * 14:
+                return
         self.progress.start(label=tr.qt_misc_optimizing())
         self.col.optimize()
         self.pm.profile["lastOptimize"] = int_time()
@@ -1111,12 +1112,23 @@ title="{}" {}>{}</button>""".format(
         self.applyShortcuts(globalShortcuts)
         self.stateShortcuts: list[QShortcut] = []
 
+    def _normalize_shortcuts(
+        self, shortcuts: Sequence[tuple[str, Callable]]
+    ) -> Sequence[tuple[QKeySequence, Callable]]:
+        """
+        Remove duplicate shortcuts (possibly added by add-ons)
+        by normalizing them and filtering through a dictionary.
+        The last duplicate shortcut wins, so add-ons will override
+        standard shortcuts if they append to the shortcut list.
+        """
+        return tuple({QKeySequence(key): fn for key, fn in shortcuts}.items())
+
     def applyShortcuts(
         self, shortcuts: Sequence[tuple[str, Callable]]
     ) -> list[QShortcut]:
         qshortcuts = []
-        for key, fn in shortcuts:
-            scut = QShortcut(QKeySequence(key), self, activated=fn)  # type: ignore
+        for key, fn in self._normalize_shortcuts(shortcuts):
+            scut = QShortcut(key, self, activated=fn)  # type: ignore
             scut.setAutoRepeat(False)
             qshortcuts.append(scut)
         return qshortcuts

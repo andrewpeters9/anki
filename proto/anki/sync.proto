@@ -9,10 +9,9 @@ package anki.sync;
 
 import "anki/generic.proto";
 
-service SyncService {
+service BackendSyncService {
   rpc SyncMedia(SyncAuth) returns (generic.Empty);
   rpc AbortMediaSync(generic.Empty) returns (generic.Empty);
-
   rpc SyncLogin(SyncLoginRequest) returns (SyncAuth);
   rpc SyncStatus(SyncAuth) returns (SyncStatusResponse);
   rpc SyncCollection(SyncAuth) returns (SyncCollectionResponse);

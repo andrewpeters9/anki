@@ -14,9 +14,9 @@ use super::media::MediaUseMap;
 use super::Context;
 use crate::import_export::package::media::safe_normalized_file_name;
 use crate::import_export::ImportProgress;
-use crate::import_export::IncrementableProgress;
 use crate::import_export::NoteLog;
 use crate::prelude::*;
+use crate::progress::ThrottlingProgressHandler;
 use crate::text::replace_media_refs;
 
 struct NoteContext<'a> {
@@ -164,25 +164,36 @@ impl<'n> NoteContext<'n> {
     fn import_notes(
         &mut self,
         notes: Vec<Note>,
-        progress: &mut IncrementableProgress<ImportProgress>,
+        progress: &mut ThrottlingProgressHandler<ImportProgress>,
     ) -> Result<()> {
         let mut incrementor = progress.incrementor(ImportProgress::Notes);
 
         for mut note in notes {
             incrementor.increment()?;
-            if let Some(notetype_id) = self.remapped_notetypes.get(&note.notetype_id) {
-                if self.target_guids.contains_key(&note.guid) {
-                    self.imports.log_conflicting(note);
+            let remapped_notetype_id = self.remapped_notetypes.get(&note.notetype_id);
+            if let Some(existing_note) = self.target_guids.get(&note.guid) {
+                if existing_note.mtime < note.mtime {
+                    if existing_note.notetype_id != note.notetype_id
+                        || remapped_notetype_id.is_some()
+                    {
+                        // Existing GUID with different notetype id, or changed notetype schema
+                        self.imports.log_conflicting(note);
+                    } else {
+                        self.update_note(note, existing_note.id)?;
+                    }
                 } else {
-                    note.notetype_id = *notetype_id;
-                    self.add_note(note)?;
+                    self.imports.log_duplicate(note, existing_note.id);
                 }
-            } else if let Some(&meta) = self.target_guids.get(&note.guid) {
-                self.maybe_update_note(note, meta)?;
             } else {
+                if let Some(remapped_ntid) = remapped_notetype_id {
+                    // Notetypes have diverged, but this is a new note, so we can import
+                    // with a new notetype id.
+                    note.notetype_id = *remapped_ntid;
+                }
                 self.add_note(note)?;
             }
         }
+
         Ok(())
     }
 
@@ -215,19 +226,6 @@ impl<'n> NoteContext<'n> {
 
     fn get_expected_note(&mut self, nid: NoteId) -> Result<Note> {
         self.target_col.storage.get_note(nid)?.or_not_found(nid)
-    }
-
-    fn maybe_update_note(&mut self, note: Note, meta: NoteMeta) -> Result<()> {
-        if meta.mtime < note.mtime {
-            if meta.notetype_id == note.notetype_id {
-                self.update_note(note, meta.id)?;
-            } else {
-                self.imports.log_conflicting(note);
-            }
-        } else {
-            self.imports.log_duplicate(note, meta.id);
-        }
-        Ok(())
     }
 
     fn update_note(&mut self, mut note: Note, target_id: NoteId) -> Result<()> {
@@ -292,7 +290,6 @@ impl Notetype {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::collection::open_test_collection;
     use crate::import_export::package::media::SafeMediaEntry;
 
     /// Import [Note] into [Collection], optionally taking a [MediaUseMap],
@@ -300,15 +297,15 @@ mod test {
     macro_rules! import_note {
         ($col:expr, $note:expr, $old_notetype:expr => $new_notetype:expr) => {{
             let mut media_map = MediaUseMap::default();
+            let mut progress = $col.new_progress_handler();
             let mut ctx = NoteContext::new(Usn(1), &mut $col, &mut media_map).unwrap();
             ctx.remapped_notetypes.insert($old_notetype, $new_notetype);
-            let mut progress = IncrementableProgress::new(|_, _| true);
             ctx.import_notes(vec![$note], &mut progress).unwrap();
             ctx.imports.log
         }};
         ($col:expr, $note:expr, $media_map:expr) => {{
+            let mut progress = $col.new_progress_handler();
             let mut ctx = NoteContext::new(Usn(1), &mut $col, &mut $media_map).unwrap();
-            let mut progress = IncrementableProgress::new(|_, _| true);
             ctx.import_notes(vec![$note], &mut progress).unwrap();
             ctx.imports.log
         }};
@@ -341,7 +338,7 @@ mod test {
 
     #[test]
     fn should_add_note_with_new_id_if_guid_is_unique_and_id_is_not() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let mut note = NoteAdder::basic(&mut col).add(&mut col);
         note.guid = "other".to_string();
         let original_id = note.id;
@@ -353,7 +350,7 @@ mod test {
 
     #[test]
     fn should_skip_note_if_guid_already_exists_with_newer_mtime() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let mut note = NoteAdder::basic(&mut col).add(&mut col);
         note.mtime.0 -= 1;
         note.fields_mut()[0] = "outdated".to_string();
@@ -365,7 +362,7 @@ mod test {
 
     #[test]
     fn should_update_note_if_guid_already_exists_with_different_id() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let mut note = NoteAdder::basic(&mut col).add(&mut col);
         note.id.0 = 42;
         note.mtime.0 += 1;
@@ -378,7 +375,7 @@ mod test {
 
     #[test]
     fn should_ignore_note_if_guid_already_exists_with_different_notetype() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let mut note = NoteAdder::basic(&mut col).add(&mut col);
         note.notetype_id.0 = 42;
         note.mtime.0 += 1;
@@ -391,7 +388,7 @@ mod test {
 
     #[test]
     fn should_add_note_with_remapped_notetype_if_in_notetype_map() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let basic_ntid = col.get_notetype_by_name("basic").unwrap().unwrap().id;
         let mut note = NoteAdder::basic(&mut col).note();
         note.notetype_id.0 = 123;
@@ -403,7 +400,7 @@ mod test {
 
     #[test]
     fn should_ignore_note_if_guid_already_exists_and_notetype_is_remapped() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let basic_ntid = col.get_notetype_by_name("basic").unwrap().unwrap().id;
         let mut note = NoteAdder::basic(&mut col).add(&mut col);
         note.notetype_id.0 = 123;
@@ -417,7 +414,7 @@ mod test {
 
     #[test]
     fn should_add_note_with_remapped_media_reference_in_field_if_in_media_map() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let mut note = NoteAdder::basic(&mut col).note();
         note.fields_mut()[0] = "<img src='foo.jpg'>".to_string();
 

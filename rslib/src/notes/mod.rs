@@ -1,14 +1,15 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+pub(crate) mod service;
 pub(crate) mod undo;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use anki_proto::notes::note_fields_check_response::State as NoteFieldsState;
 use itertools::Itertools;
-use num_integer::Integer;
 use sha1::Digest;
 use sha1::Sha1;
 
@@ -17,8 +18,6 @@ use crate::define_newtype;
 use crate::notetype::CardGenContext;
 use crate::notetype::NoteField;
 use crate::ops::StateChanges;
-use crate::pb;
-use crate::pb::notes::note_fields_check_response::State as NoteFieldsState;
 use crate::prelude::*;
 use crate::template::field_is_empty;
 use crate::text::ensure_string_in_nfc;
@@ -259,9 +258,9 @@ pub(crate) fn normalize_field(field: &mut String, normalize_text: bool) {
     }
 }
 
-impl From<Note> for pb::notes::Note {
+impl From<Note> for anki_proto::notes::Note {
     fn from(n: Note) -> Self {
-        pb::notes::Note {
+        anki_proto::notes::Note {
             id: n.id.0,
             guid: n.guid,
             notetype_id: n.notetype_id.0,
@@ -273,8 +272,8 @@ impl From<Note> for pb::notes::Note {
     }
 }
 
-impl From<pb::notes::Note> for Note {
-    fn from(n: pb::notes::Note) -> Self {
+impl From<anki_proto::notes::Note> for Note {
+    fn from(n: anki_proto::notes::Note) -> Self {
         Note {
             id: NoteId(n.id),
             guid: n.guid,
@@ -313,7 +312,8 @@ fn anki_base91(n: u64) -> String {
 pub fn to_base_n(mut n: u64, table: &[u8]) -> String {
     let mut buf = String::new();
     while n > 0 {
-        let (q, r) = n.div_rem(&(table.len() as u64));
+        let tablelen = table.len() as u64;
+        let (q, r) = (n / tablelen, n % tablelen);
         buf.push(table[r as usize] as char);
         n = q;
     }
@@ -350,8 +350,7 @@ impl Collection {
         self.set_current_notetype_id(note.notetype_id)
     }
 
-    #[cfg(test)]
-    pub(crate) fn update_note(&mut self, note: &mut Note) -> Result<OpOutput<()>> {
+    pub fn update_note(&mut self, note: &mut Note) -> Result<OpOutput<()>> {
         self.transact(Op::UpdateNote, |col| col.update_note_inner(note))
     }
 
@@ -542,7 +541,7 @@ impl Collection {
     /// Check if the note's first field is empty or a duplicate. Then for cloze
     /// notetypes, check if there is a cloze in a non-cloze field or if there's
     /// no cloze at all. For other notetypes, just check if there's a cloze.
-    pub(crate) fn note_fields_check(&mut self, note: &Note) -> Result<NoteFieldsState> {
+    pub fn note_fields_check(&mut self, note: &Note) -> Result<NoteFieldsState> {
         Ok(if let Some(text) = note.fields.get(0) {
             let field1 = if self.get_config_bool(BoolKey::NormalizeNoteText) {
                 normalize_to_nfc(text)
@@ -631,7 +630,6 @@ fn note_differs_from_db(existing_note: &mut Note, note: &mut Note) -> bool {
 mod test {
     use super::anki_base91;
     use super::field_checksum;
-    use crate::collection::open_test_collection;
     use crate::config::BoolKey;
     use crate::decks::DeckId;
     use crate::error::Result;
@@ -655,7 +653,7 @@ mod test {
 
     #[test]
     fn adding_cards() -> Result<()> {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let nt = col
             .get_notetype_by_name("basic (and reversed card)")?
             .unwrap();
@@ -703,7 +701,7 @@ mod test {
 
     #[test]
     fn normalization() -> Result<()> {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         let nt = col.get_notetype_by_name("Basic")?.unwrap();
         let mut note = nt.new_note();
@@ -735,7 +733,7 @@ mod test {
 
     #[test]
     fn undo() -> Result<()> {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let nt = col
             .get_notetype_by_name("basic (and reversed card)")?
             .unwrap();

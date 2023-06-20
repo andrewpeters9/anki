@@ -9,23 +9,23 @@ use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 
+use anki_io::open_file;
+pub use anki_proto::import_export::csv_metadata::Deck as CsvDeck;
+pub use anki_proto::import_export::csv_metadata::Delimiter;
+pub use anki_proto::import_export::csv_metadata::DupeResolution;
+pub use anki_proto::import_export::csv_metadata::MappedNotetype;
+pub use anki_proto::import_export::csv_metadata::MatchScope;
+pub use anki_proto::import_export::csv_metadata::Notetype as CsvNotetype;
+pub use anki_proto::import_export::CsvMetadata;
 use itertools::Itertools;
 use strum::IntoEnumIterator;
 
 use super::import::build_csv_reader;
 use crate::config::I32ConfigKey;
-use crate::error::ImportError;
+use crate::import_export::text::csv::import::FieldSourceColumns;
 use crate::import_export::text::NameOrId;
-use crate::io::open_file;
+use crate::import_export::ImportError;
 use crate::notetype::NoteField;
-use crate::pb::generic::StringList;
-pub use crate::pb::import_export::csv_metadata::Deck as CsvDeck;
-pub use crate::pb::import_export::csv_metadata::Delimiter;
-pub use crate::pb::import_export::csv_metadata::DupeResolution;
-pub use crate::pb::import_export::csv_metadata::MappedNotetype;
-pub use crate::pb::import_export::csv_metadata::MatchScope;
-pub use crate::pb::import_export::csv_metadata::Notetype as CsvNotetype;
-pub use crate::pb::import_export::CsvMetadata;
 use crate::prelude::*;
 use crate::text::html_to_text_line;
 use crate::text::is_html;
@@ -42,10 +42,16 @@ impl Collection {
         path: &str,
         delimiter: Option<Delimiter>,
         notetype_id: Option<NotetypeId>,
+        deck_id: Option<DeckId>,
         is_html: Option<bool>,
     ) -> Result<CsvMetadata> {
         let mut reader = open_file(path)?;
-        self.get_reader_metadata(&mut reader, delimiter, notetype_id, is_html)
+        let meta =
+            self.get_reader_metadata(&mut reader, delimiter, notetype_id, deck_id, is_html)?;
+        if meta.preview.is_empty() {
+            return Err(ImportError::EmptyFile.into());
+        }
+        Ok(meta)
     }
 
     fn get_reader_metadata(
@@ -53,6 +59,7 @@ impl Collection {
         mut reader: impl Read + Seek,
         delimiter: Option<Delimiter>,
         notetype_id: Option<NotetypeId>,
+        deck_id: Option<DeckId>,
         is_html: Option<bool>,
     ) -> Result<CsvMetadata> {
         let mut metadata = CsvMetadata::from_config(self);
@@ -62,9 +69,8 @@ impl Collection {
         maybe_set_fallback_is_html(&mut metadata, &records, is_html)?;
         set_preview(&mut metadata, &records)?;
         maybe_set_fallback_columns(&mut metadata)?;
-        self.maybe_set_fallback_notetype(&mut metadata, notetype_id)?;
+        self.maybe_set_notetype_and_deck(&mut metadata, notetype_id, deck_id)?;
         self.maybe_init_notetype_map(&mut metadata)?;
-        self.maybe_set_fallback_deck(&mut metadata)?;
 
         Ok(metadata)
     }
@@ -134,7 +140,7 @@ impl Collection {
             }
             "notetype" => {
                 if let Ok(Some(nt)) = self.notetype_by_name_or_id(&NameOrId::parse(value)) {
-                    metadata.notetype = Some(CsvNotetype::new_global(nt.id));
+                    metadata.notetype = Some(new_global_csv_notetype(nt.id));
                 }
             }
             "deck" => {
@@ -176,36 +182,32 @@ impl Collection {
         }
     }
 
-    fn maybe_set_fallback_notetype(
+    /// Ensure notetype and deck are set.
+    ///
+    /// - When the UI is first loaded, both notetype and deck arguments will be
+    ///   None.
+    /// - When the UI refreshes due to user changes, the currently-selected deck
+    ///   and notetype will be provided.
+    /// - Metadata may already have deck and notetype set, if those directives
+    ///   were present in the file to import. In the UI refresh case, we
+    ///   override them with the current UI values, so that the user can adjust
+    ///   the deck/notetype if they wish.
+    /// - In the initial load case, if notetype/deck were not specified in file,
+    ///   we apply the defaults from defaults_for_adding().
+    pub(crate) fn maybe_set_notetype_and_deck(
         &mut self,
-        metadata: &mut CsvMetadata,
+        metadata: &mut anki_proto::import_export::CsvMetadata,
         notetype_id: Option<NotetypeId>,
+        deck_id: Option<DeckId>,
     ) -> Result<()> {
-        if let Some(ntid) = notetype_id {
-            metadata.notetype = Some(CsvNotetype::new_global(ntid));
-        } else if metadata.notetype.is_none() {
-            metadata.notetype = Some(CsvNotetype::new_global(self.fallback_notetype_id()?));
-        }
-        Ok(())
-    }
-
-    fn maybe_set_fallback_deck(&mut self, metadata: &mut CsvMetadata) -> Result<()> {
-        if metadata.deck.is_none() {
-            metadata.deck = Some(CsvDeck::DeckId(
-                metadata
-                    .notetype_id()
-                    .and_then(|ntid| self.default_deck_for_notetype(ntid).transpose())
-                    .unwrap_or_else(|| {
-                        self.get_current_deck().map(|deck| {
-                            if deck.is_filtered() {
-                                DeckId(1)
-                            } else {
-                                deck.id
-                            }
-                        })
-                    })?
-                    .0,
+        let defaults = self.defaults_for_adding(DeckId(0))?;
+        if metadata.notetype.is_none() || notetype_id.is_some() {
+            metadata.notetype = Some(new_global_csv_notetype(
+                notetype_id.unwrap_or(defaults.notetype_id),
             ));
+        }
+        if metadata.deck.is_none() || deck_id.is_some() {
+            metadata.deck = Some(CsvDeck::DeckId(deck_id.unwrap_or(defaults.deck_id).0));
         }
         Ok(())
     }
@@ -234,21 +236,17 @@ impl Collection {
         }
         Ok(())
     }
-
-    fn fallback_notetype_id(&mut self) -> Result<NotetypeId> {
-        Ok(if let Some(notetype_id) = self.get_current_notetype_id() {
-            notetype_id
-        } else {
-            self.storage
-                .get_all_notetype_names()?
-                .first()
-                .or_invalid("collection has no notetypes")?
-                .0
-        })
-    }
 }
 
-impl CsvMetadata {
+pub(super) trait CsvMetadataHelpers {
+    fn from_config(col: &Collection) -> Self;
+    fn deck(&self) -> Result<&CsvDeck>;
+    fn notetype(&self) -> Result<&CsvNotetype>;
+    fn field_source_columns(&self) -> Result<FieldSourceColumns>;
+    fn meta_columns(&self) -> HashSet<usize>;
+}
+
+impl CsvMetadataHelpers for CsvMetadata {
     /// Defaults with config values filled in.
     fn from_config(col: &Collection) -> Self {
         Self {
@@ -257,9 +255,56 @@ impl CsvMetadata {
             ..Default::default()
         }
     }
+
+    fn deck(&self) -> Result<&CsvDeck> {
+        self.deck.as_ref().or_invalid("deck oneof not set")
+    }
+
+    fn notetype(&self) -> Result<&CsvNotetype> {
+        self.notetype.as_ref().or_invalid("notetype oneof not set")
+    }
+
+    fn field_source_columns(&self) -> Result<FieldSourceColumns> {
+        Ok(match self.notetype()? {
+            CsvNotetype::GlobalNotetype(global) => global
+                .field_columns
+                .iter()
+                .map(|&i| (i > 0).then_some(i as usize))
+                .collect(),
+            CsvNotetype::NotetypeColumn(_) => {
+                let meta_columns = self.meta_columns();
+                (1..self.column_labels.len() + 1)
+                    .filter(|idx| !meta_columns.contains(idx))
+                    .map(Some)
+                    .collect()
+            }
+        })
+    }
+
+    fn meta_columns(&self) -> HashSet<usize> {
+        let mut columns = HashSet::new();
+        if let Some(CsvDeck::DeckColumn(deck_column)) = self.deck {
+            columns.insert(deck_column as usize);
+        }
+        if let Some(CsvNotetype::NotetypeColumn(notetype_column)) = self.notetype {
+            columns.insert(notetype_column as usize);
+        }
+        if self.tags_column > 0 {
+            columns.insert(self.tags_column as usize);
+        }
+        if self.guid_column > 0 {
+            columns.insert(self.guid_column as usize);
+        }
+        columns
+    }
 }
 
-impl DupeResolution {
+pub(super) trait DupeResolutionExt: Sized {
+    fn from_config(col: &Collection) -> Self;
+    fn from_text(text: &str) -> Option<Self>;
+}
+
+impl DupeResolutionExt for DupeResolution {
     fn from_config(col: &Collection) -> Self {
         Self::from_i32(col.get_config_i32(I32ConfigKey::CsvDuplicateResolution)).unwrap_or_default()
     }
@@ -274,7 +319,12 @@ impl DupeResolution {
     }
 }
 
-impl MatchScope {
+pub(super) trait MatchScopeExt: Sized {
+    fn from_config(col: &Collection) -> Self;
+    fn from_text(text: &str) -> Option<Self>;
+}
+
+impl MatchScopeExt for MatchScope {
     fn from_config(col: &Collection) -> Self {
         Self::from_i32(col.get_config_i32(I32ConfigKey::MatchScope)).unwrap_or_default()
     }
@@ -302,7 +352,6 @@ fn collect_preview_records(
     let mut csv_reader = build_csv_reader(reader, metadata.delimiter())?;
     csv_reader
         .records()
-        .into_iter()
         .take(PREVIEW_LENGTH)
         .collect::<csv::Result<_>>()
         .or_invalid("invalid csv")
@@ -324,8 +373,12 @@ fn set_preview(metadata: &mut CsvMetadata, records: &[csv::StringRecord]) -> Res
     Ok(())
 }
 
-fn build_preview_row(min_len: usize, record: &csv::StringRecord, strip_html: bool) -> StringList {
-    StringList {
+fn build_preview_row(
+    min_len: usize,
+    record: &csv::StringRecord,
+    strip_html: bool,
+) -> anki_proto::generic::StringList {
+    anki_proto::generic::StringList {
         vals: record
             .iter()
             .pad_using(min_len, |_| "")
@@ -491,8 +544,13 @@ fn strip_line_ending(line: &str) -> &str {
         .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(line))
 }
 
-impl Delimiter {
-    pub fn byte(self) -> u8 {
+pub(super) trait DelimeterExt {
+    fn byte(self) -> u8;
+    fn name(self) -> &'static str;
+}
+
+impl DelimeterExt for Delimiter {
+    fn byte(self) -> u8 {
         match self {
             Delimiter::Comma => b',',
             Delimiter::Semicolon => b';',
@@ -503,7 +561,7 @@ impl Delimiter {
         }
     }
 
-    pub fn name(self) -> &'static str {
+    fn name(self) -> &'static str {
         match self {
             Delimiter::Comma => "comma",
             Delimiter::Semicolon => "semicolon",
@@ -515,40 +573,11 @@ impl Delimiter {
     }
 }
 
-impl CsvNotetype {
-    fn new_global(id: NotetypeId) -> Self {
-        Self::GlobalNotetype(MappedNotetype {
-            id: id.0,
-            field_columns: Vec::new(),
-        })
-    }
-}
-
-impl CsvMetadata {
-    fn notetype_id(&self) -> Option<NotetypeId> {
-        if let Some(CsvNotetype::GlobalNotetype(ref global)) = self.notetype {
-            Some(NotetypeId(global.id))
-        } else {
-            None
-        }
-    }
-
-    pub(super) fn meta_columns(&self) -> HashSet<usize> {
-        let mut columns = HashSet::new();
-        if let Some(CsvDeck::DeckColumn(deck_column)) = self.deck {
-            columns.insert(deck_column as usize);
-        }
-        if let Some(CsvNotetype::NotetypeColumn(notetype_column)) = self.notetype {
-            columns.insert(notetype_column as usize);
-        }
-        if self.tags_column > 0 {
-            columns.insert(self.tags_column as usize);
-        }
-        if self.guid_column > 0 {
-            columns.insert(self.guid_column as usize);
-        }
-        columns
-    }
+fn new_global_csv_notetype(id: NotetypeId) -> CsvNotetype {
+    CsvNotetype::GlobalNotetype(MappedNotetype {
+        id: id.0,
+        field_columns: Vec::new(),
+    })
 }
 
 impl NameOrId {
@@ -561,32 +590,52 @@ impl NameOrId {
     }
 }
 
-impl From<csv::StringRecord> for StringList {
-    fn from(record: csv::StringRecord) -> Self {
-        Self {
-            vals: record.iter().map(ToString::to_string).collect(),
-        }
-    }
-}
-
 #[cfg(test)]
-mod test {
+pub(in crate::import_export) mod test {
     use std::io::Cursor;
 
     use super::*;
-    use crate::collection::open_test_collection;
 
     macro_rules! metadata {
         ($col:expr,$csv:expr) => {
             metadata!($col, $csv, None)
         };
         ($col:expr,$csv:expr, $delim:expr) => {
-            $col.get_reader_metadata(Cursor::new($csv.as_bytes()), $delim, None, None)
+            $col.get_reader_metadata(Cursor::new($csv.as_bytes()), $delim, None, None, None)
                 .unwrap()
         };
     }
 
-    impl CsvMetadata {
+    pub trait CsvMetadataTestExt {
+        fn defaults_for_testing() -> Self;
+        fn unwrap_deck_id(&self) -> i64;
+        fn unwrap_notetype_id(&self) -> i64;
+        fn unwrap_notetype_map(&self) -> &[u32];
+    }
+
+    impl CsvMetadataTestExt for CsvMetadata {
+        fn defaults_for_testing() -> Self {
+            Self {
+                delimiter: Delimiter::Comma as i32,
+                force_delimiter: false,
+                is_html: false,
+                force_is_html: false,
+                tags_column: 0,
+                guid_column: 0,
+                global_tags: Vec::new(),
+                updated_tags: Vec::new(),
+                column_labels: vec!["".to_string(); 2],
+                deck: Some(CsvDeck::DeckId(1)),
+                notetype: Some(CsvNotetype::GlobalNotetype(MappedNotetype {
+                    id: 1,
+                    field_columns: vec![1, 2],
+                })),
+                preview: Vec::new(),
+                dupe_resolution: 0,
+                match_scope: 0,
+            }
+        }
+
         fn unwrap_deck_id(&self) -> i64 {
             match self.deck {
                 Some(CsvDeck::DeckId(did)) => did,
@@ -600,11 +649,17 @@ mod test {
                 _ => panic!("no notetype id"),
             }
         }
+        fn unwrap_notetype_map(&self) -> &[u32] {
+            match &self.notetype {
+                Some(CsvNotetype::GlobalNotetype(nt)) => &nt.field_columns,
+                _ => panic!("no notetype map"),
+            }
+        }
     }
 
     #[test]
     fn should_detect_deck_by_name_or_id() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let deck_id = col.get_or_create_normal_deck("my deck").unwrap().id.0;
         assert_eq!(metadata!(col, "#deck:my deck\n").unwrap_deck_id(), deck_id);
         assert_eq!(
@@ -618,7 +673,7 @@ mod test {
 
     #[test]
     fn should_detect_notetype_by_name_or_id() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let basic_id = col.get_notetype_by_name("Basic").unwrap().unwrap().id.0;
         assert_eq!(
             metadata!(col, "#notetype:Basic\n").unwrap_notetype_id(),
@@ -632,7 +687,7 @@ mod test {
 
     #[test]
     fn should_detect_valid_delimiters() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         assert_eq!(
             metadata!(col, "#separator:comma\n").delimiter(),
             Delimiter::Comma
@@ -661,7 +716,7 @@ mod test {
 
     #[test]
     fn should_enforce_valid_html_flag() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         let meta = metadata!(col, "#html:true\n");
         assert!(meta.is_html);
@@ -676,7 +731,7 @@ mod test {
 
     #[test]
     fn should_set_missing_html_flag_by_first_line() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         let meta = metadata!(col, "<br/>\n");
         assert!(meta.is_html);
@@ -690,7 +745,7 @@ mod test {
 
     #[test]
     fn should_detect_old_and_new_style_tags() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         assert_eq!(metadata!(col, "tags:foo bar\n").global_tags, ["foo", "bar"]);
         assert_eq!(
             metadata!(col, "#tags:foo bar\n").global_tags,
@@ -708,7 +763,7 @@ mod test {
 
     #[test]
     fn should_detect_column_number_and_names() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         // detect from line
         assert_eq!(metadata!(col, "foo;bar\n").column_labels.len(), 2);
         // detect encoded
@@ -745,7 +800,7 @@ mod test {
 
     #[test]
     fn should_detect_column_number_despite_escaped_line_breaks() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         assert_eq!(
             metadata!(col, "\"foo|\nbar\"\tfoo\tbar\n")
                 .column_labels
@@ -754,32 +809,23 @@ mod test {
         );
     }
 
-    impl CsvMetadata {
-        fn unwrap_notetype_map(&self) -> &[u32] {
-            match &self.notetype {
-                Some(CsvNotetype::GlobalNotetype(nt)) => &nt.field_columns,
-                _ => panic!("no notetype map"),
-            }
-        }
-    }
-
     #[test]
     fn should_map_default_notetype_fields_by_index_if_no_column_names() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let meta = metadata!(col, "#deck column:1\nfoo,bar,baz\n");
         assert_eq!(meta.unwrap_notetype_map(), &[2, 3]);
     }
 
     #[test]
     fn should_map_default_notetype_fields_by_given_column_names() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let meta = metadata!(col, "#columns:Back\tFront\nfoo,bar,baz\n");
         assert_eq!(meta.unwrap_notetype_map(), &[2, 1]);
     }
 
     #[test]
     fn should_gather_first_lines_into_preview() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         let meta = metadata!(col, "#separator: \nfoo bar\nbaz<br>\n");
         assert_eq!(meta.preview[0].vals, ["foo", "bar"]);
         // html is stripped
@@ -788,7 +834,7 @@ mod test {
 
     #[test]
     fn should_parse_first_first_line_despite_bom() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         assert_eq!(
             metadata!(col, "\u{feff}#separator:tab\n").delimiter(),
             Delimiter::Tab

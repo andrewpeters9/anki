@@ -67,7 +67,6 @@ class DeckBrowser:
     def show(self) -> None:
         av_player.stop_and_clear_queue()
         self.web.set_bridge_command(self._linkHandler, self)
-        self._renderPage()
         # redraw top bar for theme change
         self.mw.toolbar.redraw()
         self.refresh()
@@ -244,6 +243,7 @@ class DeckBrowser:
             node.deck_id,
             html.escape(node.name),
         )
+
         # due counts
         def nonzeroColour(cnt: int, klass: str) -> str:
             if not cnt:

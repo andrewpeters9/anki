@@ -388,7 +388,7 @@ class Toolbar:
 
         return f"""
 <a class=hitem tabindex="-1" aria-label="{name}" title="{title}" id="{label}" href=# onclick="return pycmd('{label}')"
->{name}<img id=sync-spinner src='/_anki/imgs/refresh.svg'>
+>{name}<img id=sync-spinner class="no-reduce-motion" src='/_anki/imgs/refresh.svg'>
 </a>"""
 
     def set_sync_active(self, active: bool) -> None:
@@ -451,7 +451,6 @@ class Toolbar:
 
 
 class BottomBar(Toolbar):
-
     _centerBody = """
 <center id=outer><table width=100%% id=header><tr><td align=center>
 %s</td></tr></table></center>

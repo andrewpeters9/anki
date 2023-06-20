@@ -102,7 +102,6 @@ from aqt import stats, about, preferences, mediasync  # isort:skip
 
 
 class DialogManager:
-
     _dialogs: dict[str, list] = {
         "AddCards": [addcards.AddCards, None],
         "AddonsDialog": [addons.AddonsDialog, None],
@@ -146,7 +145,7 @@ class DialogManager:
             return None
 
         # ask all windows to close and await a reply
-        for (name, (creator, instance)) in self._dialogs.items():
+        for name, (creator, instance) in self._dialogs.items():
             if not instance:
                 continue
 
@@ -271,7 +270,6 @@ def setupLangAndBackend(
 
 
 class AnkiApp(QApplication):
-
     # Single instance support on Win32/Linux
     ##################################################
 
@@ -477,7 +475,6 @@ PROFILE_CODE = os.environ.get("ANKI_PROFILE_CODE")
 
 
 def write_profile_results() -> None:
-
     profiler.disable()
     profile = os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), "anki.prof")
     profiler.dump_stats(profile)
@@ -523,20 +520,26 @@ def _run(argv: Optional[list[str]] = None, exec: bool = True) -> Optional[AnkiAp
         return None
 
     if PROFILE_CODE:
-
         profiler = cProfile.Profile()
         profiler.enable()
 
-    if (
-        getattr(sys, "frozen", False)
-        and (os.getenv("QT_QPA_PLATFORM") == "wayland" or os.getenv("WAYLAND_DISPLAY"))
-        and not os.getenv("ANKI_WAYLAND")
-    ):
-        if not os.getenv("DISPLAY"):
-            print(
-                "Trying to use X11, but it is not available. Falling back to Wayland, which has some bugs:"
-            )
-            print("https://github.com/ankitects/anki/issues/1767")
+    packaged = getattr(sys, "frozen", False)
+    x11_available = os.getenv("DISPLAY")
+    wayland_configured = qtmajor > 5 and (
+        os.getenv("QT_QPA_PLATFORM") == "wayland" or os.getenv("WAYLAND_DISPLAY")
+    )
+    wayland_forced = os.getenv("ANKI_WAYLAND")
+
+    if packaged and wayland_configured:
+        if wayland_forced or not x11_available:
+            # Work around broken fractional scaling in Wayland
+            # https://bugreports.qt.io/browse/QTBUG-113574
+            os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "RoundPreferFloor"
+            if not x11_available:
+                print(
+                    "Trying to use X11, but it is not available. Falling back to Wayland, which has some bugs:"
+                )
+                print("https://github.com/ankitects/anki/issues/1767")
         else:
             # users need to opt in to wayland support, given the issues it has
             print("Wayland support is disabled by default due to bugs:")

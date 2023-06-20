@@ -9,8 +9,12 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-camino = "1.1.2"
-clap = { version = "4.1.1", features = ["derive"] }
-junction = "0.2.0"
+anki_io = { version = "0.0.0", path = "../../rslib/io" }
+anyhow = "1.0.71"
+camino = "1.1.4"
+clap = { version = "4.2.1", features = ["derive"] }
+itertools = "0.10.5"
+junction = "1.0.0"
 termcolor = "1.2.0"
+which = "4.4.0"
 workspace-hack = { version = "0.1", path = "../../tools/workspace-hack" }

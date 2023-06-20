@@ -1,6 +1,7 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+mod service;
 pub(crate) mod undo;
 
 use std::collections::hash_map::Entry;
@@ -183,6 +184,13 @@ impl Card {
             // (re)learning card must have at least 1 step remaining
             .max(1) as u32;
         (remaining != new_remaining).then_some(new_remaining)
+    }
+
+    /// Supposedly unique across all reviews in the collection.
+    pub fn review_seed(&self) -> u64 {
+        (self.id.0 as u64)
+            .rotate_left(8)
+            .wrapping_add(self.reps as u64)
     }
 }
 

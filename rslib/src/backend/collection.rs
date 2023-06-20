@@ -3,32 +3,18 @@
 
 use std::sync::MutexGuard;
 
+use anki_proto::generic;
 use tracing::error;
 
-use super::progress::Progress;
 use super::Backend;
-use crate::backend::progress::progress_to_proto;
 use crate::collection::CollectionBuilder;
-use crate::pb;
-pub(super) use crate::pb::collection::collection_service::Service as CollectionService;
 use crate::prelude::*;
+use crate::progress::progress_to_proto;
+use crate::services::BackendCollectionService;
 use crate::storage::SchemaVersion;
 
-impl CollectionService for Backend {
-    fn latest_progress(&self, _input: pb::generic::Empty) -> Result<pb::collection::Progress> {
-        let progress = self.progress_state.lock().unwrap().last_progress;
-        Ok(progress_to_proto(progress, &self.tr))
-    }
-
-    fn set_wants_abort(&self, _input: pb::generic::Empty) -> Result<pb::generic::Empty> {
-        self.progress_state.lock().unwrap().want_abort = true;
-        Ok(().into())
-    }
-
-    fn open_collection(
-        &self,
-        input: pb::collection::OpenCollectionRequest,
-    ) -> Result<pb::generic::Empty> {
+impl BackendCollectionService for Backend {
+    fn open_collection(&self, input: anki_proto::collection::OpenCollectionRequest) -> Result<()> {
         let mut guard = self.lock_closed_collection()?;
 
         let mut builder = CollectionBuilder::new(input.collection_path);
@@ -36,17 +22,18 @@ impl CollectionService for Backend {
             .set_force_schema11(input.force_schema11)
             .set_media_paths(input.media_folder_path, input.media_db_path)
             .set_server(self.server)
-            .set_tr(self.tr.clone());
+            .set_tr(self.tr.clone())
+            .set_shared_progress_state(self.progress_state.clone());
 
         *guard = Some(builder.build()?);
 
-        Ok(().into())
+        Ok(())
     }
 
     fn close_collection(
         &self,
-        input: pb::collection::CloseCollectionRequest,
-    ) -> Result<pb::generic::Empty> {
+        input: anki_proto::collection::CloseCollectionRequest,
+    ) -> Result<()> {
         let desired_version = if input.downgrade_to_schema11 {
             Some(SchemaVersion::V11)
         } else {
@@ -61,51 +48,13 @@ impl CollectionService for Backend {
             error!(" failed: {:?}", e);
         }
 
-        Ok(().into())
-    }
-
-    fn check_database(
-        &self,
-        _input: pb::generic::Empty,
-    ) -> Result<pb::collection::CheckDatabaseResponse> {
-        let mut handler = self.new_progress_handler();
-        let progress_fn = move |progress, throttle| {
-            handler.update(Progress::DatabaseCheck(progress), throttle);
-        };
-        self.with_col(|col| {
-            col.check_database(progress_fn)
-                .map(|problems| pb::collection::CheckDatabaseResponse {
-                    problems: problems.to_i18n_strings(&col.tr),
-                })
-        })
-    }
-
-    fn get_undo_status(&self, _input: pb::generic::Empty) -> Result<pb::collection::UndoStatus> {
-        self.with_col(|col| Ok(col.undo_status().into_protobuf(&col.tr)))
-    }
-
-    fn undo(&self, _input: pb::generic::Empty) -> Result<pb::collection::OpChangesAfterUndo> {
-        self.with_col(|col| col.undo().map(|out| out.into_protobuf(&col.tr)))
-    }
-
-    fn redo(&self, _input: pb::generic::Empty) -> Result<pb::collection::OpChangesAfterUndo> {
-        self.with_col(|col| col.redo().map(|out| out.into_protobuf(&col.tr)))
-    }
-
-    fn add_custom_undo_entry(&self, input: pb::generic::String) -> Result<pb::generic::UInt32> {
-        self.with_col(|col| Ok(col.add_custom_undo_step(input.val).into()))
-    }
-
-    fn merge_undo_entries(&self, input: pb::generic::UInt32) -> Result<pb::collection::OpChanges> {
-        let starting_from = input.val as usize;
-        self.with_col(|col| col.merge_undoable_ops(starting_from))
-            .map(Into::into)
+        Ok(())
     }
 
     fn create_backup(
         &self,
-        input: pb::collection::CreateBackupRequest,
-    ) -> Result<pb::generic::Bool> {
+        input: anki_proto::collection::CreateBackupRequest,
+    ) -> Result<generic::Bool> {
         // lock collection
         let mut col_lock = self.lock_open_collection()?;
         let col = col_lock.as_mut().unwrap();
@@ -129,9 +78,54 @@ impl CollectionService for Backend {
         Ok(created.into())
     }
 
-    fn await_backup_completion(&self, _input: pb::generic::Empty) -> Result<pb::generic::Empty> {
+    fn await_backup_completion(&self) -> Result<()> {
         self.await_backup_completion()?;
-        Ok(().into())
+        Ok(())
+    }
+}
+
+impl crate::services::CollectionService for Collection {
+    fn check_database(&mut self) -> Result<anki_proto::collection::CheckDatabaseResponse> {
+        {
+            self.check_database()
+                .map(|problems| anki_proto::collection::CheckDatabaseResponse {
+                    problems: problems.to_i18n_strings(&self.tr),
+                })
+        }
+    }
+
+    fn get_undo_status(&mut self) -> Result<anki_proto::collection::UndoStatus> {
+        Ok(self.undo_status().into_protobuf(&self.tr))
+    }
+
+    fn undo(&mut self) -> Result<anki_proto::collection::OpChangesAfterUndo> {
+        self.undo().map(|out| out.into_protobuf(&self.tr))
+    }
+
+    fn redo(&mut self) -> Result<anki_proto::collection::OpChangesAfterUndo> {
+        self.redo().map(|out| out.into_protobuf(&self.tr))
+    }
+
+    fn add_custom_undo_entry(&mut self, input: generic::String) -> Result<generic::UInt32> {
+        Ok(self.add_custom_undo_step(input.val).into())
+    }
+
+    fn merge_undo_entries(
+        &mut self,
+        input: generic::UInt32,
+    ) -> Result<anki_proto::collection::OpChanges> {
+        let starting_from = input.val as usize;
+        self.merge_undoable_ops(starting_from).map(Into::into)
+    }
+
+    fn latest_progress(&mut self) -> Result<anki_proto::collection::Progress> {
+        let progress = self.state.progress.lock().unwrap().last_progress;
+        Ok(progress_to_proto(progress, &self.tr))
+    }
+
+    fn set_wants_abort(&mut self) -> Result<()> {
+        self.state.progress.lock().unwrap().want_abort = true;
+        Ok(())
     }
 }
 

@@ -5,23 +5,20 @@
 
 use std::path::Path;
 
+use anki_io::create_dir_all;
+use anki_io::read_file;
 use tempfile::tempdir;
 
 use crate::collection::CollectionBuilder;
 use crate::import_export::package::import_colpkg;
-use crate::io::create_dir;
-use crate::io::create_dir_all;
-use crate::io::read_file;
 use crate::media::MediaManager;
 use crate::prelude::*;
 
 fn collection_with_media(dir: &Path, name: &str) -> Result<Collection> {
     let name = format!("{name}_src");
-    let media_folder = dir.join(format!("{name}.media"));
-    create_dir(&media_folder)?;
     // add collection with sentinel note
     let mut col = CollectionBuilder::new(dir.join(format!("{name}.anki2")))
-        .set_media_paths(media_folder, dir.join(format!("{name}.mdb")))
+        .with_desktop_media_paths()
         .build()?;
     let nt = col.get_notetype_by_name("Basic")?.unwrap();
     let mut note = nt.new_note();
@@ -43,7 +40,8 @@ fn roundtrip() -> Result<()> {
         // export to a file
         let col = collection_with_media(dir, name)?;
         let colpkg_name = dir.join(format!("{name}.colpkg"));
-        col.export_colpkg(&colpkg_name, true, legacy, |_, _| true)?;
+        let progress = col.new_progress_handler();
+        col.export_colpkg(&colpkg_name, true, legacy)?;
 
         // import into a new collection
         let anki2_name = dir
@@ -59,7 +57,7 @@ fn roundtrip() -> Result<()> {
             &anki2_name,
             &import_media_dir,
             &import_media_db,
-            |_, _| true,
+            progress,
         )?;
 
         // confirm collection imported
@@ -82,7 +80,7 @@ fn roundtrip() -> Result<()> {
 #[test]
 #[cfg(not(target_vendor = "apple"))]
 fn normalization_check_on_export() -> Result<()> {
-    use crate::io::write_file;
+    use anki_io::write_file;
 
     let _dir = tempdir()?;
     let dir = _dir.path();
@@ -92,8 +90,7 @@ fn normalization_check_on_export() -> Result<()> {
     // manually write a file in the wrong encoding.
     write_file(col.media_folder.join("ぱぱ.jpg"), "nfd encoding")?;
     assert_eq!(
-        col.export_colpkg(&colpkg_name, true, false, |_, _| true,)
-            .unwrap_err(),
+        col.export_colpkg(&colpkg_name, true, false,).unwrap_err(),
         AnkiError::MediaCheckRequired
     );
     // file should have been cleaned up

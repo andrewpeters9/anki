@@ -27,7 +27,7 @@ import aqt.operations
 from anki import hooks
 from anki.collection import OpChanges
 from anki.decks import UpdateDeckConfigs
-from anki.scheduler_pb2 import SchedulingStates
+from anki.scheduler.v3 import SchedulingStatesWithContext, SetSchedulingStatesRequest
 from anki.utils import dev_mode
 from aqt.changenotetype import ChangeNotetypeDialog
 from aqt.deckoptions import DeckOptionsDialog
@@ -63,7 +63,6 @@ DynamicRequest = Callable[[], Response]
 
 
 class MediaServer(threading.Thread):
-
     _ready = threading.Event()
     daemon = True
 
@@ -408,18 +407,17 @@ def update_deck_configs() -> bytes:
     return b""
 
 
-def get_scheduling_states() -> bytes:
-    if states := aqt.mw.reviewer.get_scheduling_states():
-        return states.SerializeToString()
-    else:
-        return b""
+def get_scheduling_states_with_context() -> bytes:
+    return SchedulingStatesWithContext(
+        states=aqt.mw.reviewer.get_scheduling_states(),
+        context=aqt.mw.reviewer.get_scheduling_context(),
+    ).SerializeToString()
 
 
 def set_scheduling_states() -> bytes:
-    key = request.headers.get("key", "")
-    states = SchedulingStates()
+    states = SetSchedulingStatesRequest()
     states.ParseFromString(request.data)
-    aqt.mw.reviewer.set_scheduling_states(key, states)
+    aqt.mw.reviewer.set_scheduling_states(states)
     return b""
 
 
@@ -451,7 +449,7 @@ post_handler_list = [
     congrats_info,
     get_deck_configs_for_update,
     update_deck_configs,
-    get_scheduling_states,
+    get_scheduling_states_with_context,
     set_scheduling_states,
     change_notetype,
     import_csv,
@@ -478,6 +476,11 @@ exposed_backend_list = [
     "set_graph_preferences",
     # TagsService
     "complete_tag",
+    # ImageOcclusionService
+    "get_image_for_occlusion",
+    "add_image_occlusion_note",
+    "get_image_occlusion_note",
+    "update_image_occlusion_note",
 ]
 
 
@@ -511,9 +514,11 @@ def _extract_collection_post_request(path: str) -> DynamicRequest | NotFound:
                     response.headers["Content-Type"] = "application/binary"
                 else:
                     response = flask.make_response("", HTTPStatus.NO_CONTENT)
-            except:
+            except Exception as exc:
                 print(traceback.format_exc())
-                response = flask.make_response("", HTTPStatus.INTERNAL_SERVER_ERROR)
+                response = flask.make_response(
+                    str(exc), HTTPStatus.INTERNAL_SERVER_ERROR
+                )
             return response
 
         return wrapped

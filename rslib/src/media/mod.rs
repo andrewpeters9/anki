@@ -3,18 +3,21 @@
 
 pub mod check;
 pub mod files;
+mod service;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::io::create_dir_all;
+use anki_io::create_dir_all;
+
 use crate::media::files::add_data_to_folder_uniquely;
 use crate::media::files::mtime_as_i64;
 use crate::media::files::remove_files;
 use crate::media::files::sha1_of_data;
 use crate::prelude::*;
+use crate::progress::ThrottlingProgressHandler;
 use crate::sync::http_client::HttpSyncClient;
 use crate::sync::login::SyncAuth;
 use crate::sync::media::database::client::changetracker::ChangeTracker;
@@ -43,6 +46,9 @@ impl MediaManager {
         P2: AsRef<Path>,
     {
         let media_folder = media_folder.into();
+        if media_folder.as_os_str().is_empty() {
+            invalid_input!("attempted media operation without media folder set");
+        }
         create_dir_all(&media_folder)?;
         Ok(MediaManager {
             db: MediaDatabase::new(media_db.as_ref())?,
@@ -135,10 +141,11 @@ impl MediaManager {
     }
 
     /// Sync media.
-    pub async fn sync_media<F>(self, progress: F, auth: SyncAuth) -> Result<()>
-    where
-        F: FnMut(MediaSyncProgress) -> bool,
-    {
+    pub async fn sync_media(
+        self,
+        progress: ThrottlingProgressHandler<MediaSyncProgress>,
+        auth: SyncAuth,
+    ) -> Result<()> {
         let client = HttpSyncClient::new(auth);
         let mut syncer = MediaSyncer::new(self, progress, client)?;
         syncer.sync().await

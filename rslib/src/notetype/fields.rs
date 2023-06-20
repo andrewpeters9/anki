@@ -3,7 +3,6 @@
 
 use super::NoteFieldConfig;
 use super::NoteFieldProto;
-use crate::pb::generic::UInt32;
 use crate::prelude::*;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -16,7 +15,7 @@ pub struct NoteField {
 impl From<NoteField> for NoteFieldProto {
     fn from(f: NoteField) -> Self {
         NoteFieldProto {
-            ord: f.ord.map(|n| UInt32 { val: n }),
+            ord: f.ord.map(Into::into),
             name: f.name,
             config: Some(f.config),
         }
@@ -46,6 +45,7 @@ impl NoteField {
                 font_size: 20,
                 description: "".into(),
                 collapsed: false,
+                exclude_from_search: false,
                 other: vec![],
             },
         }

@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import random
 import re
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, Callable, Literal, Match, Sequence, cast
+from typing import Any, Literal, Match, Sequence, cast
 
 import aqt
 import aqt.browser
@@ -19,7 +20,11 @@ from anki.collection import Config, OpChanges, OpChangesWithCount
 from anki.scheduler.base import ScheduleCardsAsNew
 from anki.scheduler.v3 import CardAnswer, QueuedCards
 from anki.scheduler.v3 import Scheduler as V3Scheduler
-from anki.scheduler.v3 import SchedulingStates
+from anki.scheduler.v3 import (
+    SchedulingContext,
+    SchedulingStates,
+    SetSchedulingStatesRequest,
+)
 from anki.tags import MARKED_TAG
 from anki.types import assert_exhaustive
 from aqt import AnkiQt, gui_hooks
@@ -83,6 +88,7 @@ class V3CardInfo:
 
     queued_cards: QueuedCards
     states: SchedulingStates
+    context: SchedulingContext
 
     @staticmethod
     def from_queue(queued_cards: QueuedCards) -> V3CardInfo:
@@ -90,8 +96,7 @@ class V3CardInfo:
         states = top_card.states
         states.current.custom_data = top_card.card.custom_data
         return V3CardInfo(
-            queued_cards=queued_cards,
-            states=states,
+            queued_cards=queued_cards, states=states, context=top_card.context
         )
 
     def top_card(self) -> QueuedCards.QueuedCard:
@@ -143,6 +148,7 @@ class Reviewer:
         self.bottom = BottomBar(mw, mw.bottomWeb)
         self._card_info = ReviewerCardInfo(self.mw)
         self._previous_card_info = PreviousReviewerCardInfo(self.mw)
+        self._states_mutated = True
         hooks.card_did_leech.append(self.onLeech)
 
     def show(self) -> None:
@@ -267,20 +273,31 @@ class Reviewer:
     def get_scheduling_states(self) -> SchedulingStates | None:
         if v3 := self._v3:
             return v3.states
-        else:
-            return None
+        return None
 
-    def set_scheduling_states(self, key: str, states: SchedulingStates) -> None:
-        if key != self._state_mutation_key:
+    def get_scheduling_context(self) -> SchedulingContext | None:
+        if v3 := self._v3:
+            return v3.context
+        return None
+
+    def set_scheduling_states(self, request: SetSchedulingStatesRequest) -> None:
+        if request.key != self._state_mutation_key:
             return
 
         if v3 := self._v3:
-            v3.states = states
+            v3.states = request.states
 
     def _run_state_mutation_hook(self) -> None:
+        def on_eval(result: Any) -> None:
+            if result is None:
+                # eval failed, usually a syntax error
+                self._states_mutated = True
+
         if self._v3 and (js := self._state_mutation_js):
-            self.web.eval(
-                f"anki.mutateNextCardStates('{self._state_mutation_key}', (states, customData) => {{ {js} }})"
+            self._states_mutated = False
+            self.web.evalWithCallback(
+                RUN_STATE_MUTATION.format(key=self._state_mutation_key, js=js),
+                on_eval,
             )
 
     # Audio
@@ -466,6 +483,26 @@ class Reviewer:
     # Handlers
     ############################################################
 
+    def korean_shortcuts(
+        self,
+    ) -> Sequence[Union[tuple[str, Callable], tuple[Qt.Key, Callable]]]:
+        return [
+            ("ㄷ", self.mw.onEditCurrent),
+            ("ㅡ", self.showContextMenu),
+            ("ㄱ", self.replayAudio),
+            ("Ctrl+Alt+ㅜ", self.forget_current_card),
+            # does not work
+            # ("Ctrl+Alt+ㄷ", self.on_create_copy),
+            # does not work
+            # ("Ctrl+Shift+ㅇ", self.on_set_due),
+            ("ㅍ", self.onReplayRecorded),
+            ("Shift+ㅍ", self.onRecordVoice),
+            ("ㅐ", self.onOptions),
+            ("ㅑ", self.on_card_info),
+            ("Ctrl+Alt+ㅑ", self.on_previous_card_info),
+            ("ㅕ", self.mw.undo),
+        ]
+
     def _shortcutKeys(
         self,
     ) -> Sequence[Union[tuple[str, Callable], tuple[Qt.Key, Callable]]]:
@@ -495,13 +532,16 @@ class Reviewer:
             ("o", self.onOptions),
             ("i", self.on_card_info),
             ("Ctrl+Alt+i", self.on_previous_card_info),
-            ("1", lambda: self._answerCard(1)),
-            ("2", lambda: self._answerCard(2)),
-            ("3", lambda: self._answerCard(3)),
-            ("4", lambda: self._answerCard(4)),
+            *(
+                (key, functools.partial(self._answerCard, ease))
+                for ease in aqt.mw.pm.default_answer_keys
+                if (key := aqt.mw.pm.get_answer_key(ease))
+            ),
+            ("u", self.mw.undo),
             ("5", self.on_pause_audio),
             ("6", self.on_seek_backward),
             ("7", self.on_seek_forward),
+            *self.korean_shortcuts(),
         ]
 
     def on_pause_audio(self) -> None:
@@ -519,7 +559,7 @@ class Reviewer:
     def onEnterKey(self) -> None:
         if self.state == "question":
             self._getTypedAnswer()
-        elif self.state == "answer":
+        elif self.state == "answer" and aqt.mw.pm.spacebar_rates_card():
             self.bottom.web.evalWithCallback(
                 "selectedAnswerButton()", self._onAnswerButton
             )
@@ -546,6 +586,8 @@ class Reviewer:
             play_clicked_audio(url, self.card)
         elif url.startswith("updateToolbar"):
             self.mw.toolbarWeb.update_background_image()
+        elif url == "statesMutated":
+            self._states_mutated = True
         else:
             print("unrecognized anki link:", url)
 
@@ -612,6 +654,7 @@ class Reviewer:
         expected = self.typeCorrect
         provided = self.typedAnswer
         output = self.mw.col.compare_answer(expected, provided)
+
         # and update the type answer area
         def repl(match: Match) -> str:
             # can't pass a string in directly, and can't use re.escape as it
@@ -692,6 +735,9 @@ time = %(time)d;
         self.bottom.web.eval("showQuestion(%s,%d);" % (json.dumps(middle), maxTime))
 
     def _showEaseButtons(self) -> None:
+        if not self._states_mutated:
+            self.mw.progress.single_shot(50, self._showEaseButtons)
+            return
         middle = self._answerButtons()
         self.bottom.web.eval(f"showAnswer({json.dumps(middle)});")
 
@@ -977,13 +1023,19 @@ time = %(time)d;
 
     def bury_current_note(self) -> None:
         gui_hooks.reviewer_will_bury_note(self.card.nid)
-        bury_notes(parent=self.mw, note_ids=[self.card.nid],).success(
+        bury_notes(
+            parent=self.mw,
+            note_ids=[self.card.nid],
+        ).success(
             lambda res: tooltip(tr.studying_cards_buried(count=res.count))
         ).run_in_background()
 
     def bury_current_card(self) -> None:
         gui_hooks.reviewer_will_bury_card(self.card.id)
-        bury_cards(parent=self.mw, card_ids=[self.card.id],).success(
+        bury_cards(
+            parent=self.mw,
+            card_ids=[self.card.id],
+        ).success(
             lambda res: tooltip(tr.studying_cards_buried(count=res.count))
         ).run_in_background()
 
@@ -1034,3 +1086,9 @@ time = %(time)d;
     onDelete = delete_current_note
     onMark = toggle_mark_on_current_note
     setFlag = set_flag_on_current_card
+
+
+RUN_STATE_MUTATION = """
+anki.mutateNextCardStates('{key}', async (states, customData, ctx) => {{ {js} }})
+    .finally(() => bridgeCommand('statesMutated'));
+"""

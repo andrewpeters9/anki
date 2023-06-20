@@ -1,8 +1,9 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+import type { ChangeNotetypeInfo, ChangeNotetypeRequest, NotetypeNames } from "@tslib/anki/notetypes_pb";
+import { changeNotetype, getChangeNotetypeInfo } from "@tslib/anki/notetypes_service";
 import * as tr from "@tslib/ftl";
-import { Notetypes, notetypes } from "@tslib/proto";
 import { isEqual } from "lodash-es";
 import type { Readable } from "svelte/store";
 import { readable } from "svelte/store";
@@ -11,19 +12,19 @@ function nullToNegativeOne(list: (number | null)[]): number[] {
     return list.map((val) => val ?? -1);
 }
 
-/// Public only for tests.
+/** Public only for tests. */
 export function negativeOneToNull(list: number[]): (number | null)[] {
     return list.map((val) => (val === -1 ? null : val));
 }
 
-/// Wrapper for the protobuf message to make it more ergonomic.
+/** Wrapper for the protobuf message to make it more ergonomic. */
 export class ChangeNotetypeInfoWrapper {
     fields: (number | null)[];
     templates?: (number | null)[];
     oldNotetypeName: string;
-    readonly info: Notetypes.ChangeNotetypeInfo;
+    readonly info: ChangeNotetypeInfo;
 
-    constructor(info: Notetypes.ChangeNotetypeInfo) {
+    constructor(info: ChangeNotetypeInfo) {
         this.info = info;
         const templates = info.input?.newTemplates ?? [];
         if (templates.length > 0) {
@@ -33,26 +34,26 @@ export class ChangeNotetypeInfoWrapper {
         this.oldNotetypeName = info.oldNotetypeName;
     }
 
-    /// A list with an entry for each field/template in the new notetype, with
-    /// the values pointing back to indexes in the original notetype.
+    /** A list with an entry for each field/template in the new notetype, with
+    the values pointing back to indexes in the original notetype. */
     mapForContext(ctx: MapContext): (number | null)[] {
         return ctx == MapContext.Template ? this.templates ?? [] : this.fields;
     }
 
-    /// Return index of old fields/templates, with null values mapped to "Nothing"
-    /// at the end.
+    /** Return index of old fields/templates, with null values mapped to "Nothing"
+    at the end.*/
     getOldIndex(ctx: MapContext, newIdx: number): number {
         const map = this.mapForContext(ctx);
         const val = map[newIdx];
         return val ?? this.getOldNamesIncludingNothing(ctx).length - 1;
     }
 
-    /// Return all the old names, with "Nothing" at the end.
+    /** Return all the old names, with "Nothing" at the end. */
     getOldNamesIncludingNothing(ctx: MapContext): string[] {
         return [...this.getOldNames(ctx), tr.changeNotetypeNothing()];
     }
 
-    /// Old names without "Nothing" at the end.
+    /** Old names without "Nothing" at the end. */
     getOldNames(ctx: MapContext): string[] {
         return ctx == MapContext.Template
             ? this.info.oldTemplateNames
@@ -89,13 +90,13 @@ export class ChangeNotetypeInfoWrapper {
         );
     }
 
-    input(): Notetypes.ChangeNotetypeRequest {
-        return this.info.input as Notetypes.ChangeNotetypeRequest;
+    input(): ChangeNotetypeRequest {
+        return this.info.input as ChangeNotetypeRequest;
     }
 
-    /// Pack changes back into input message for saving.
-    intoInput(): Notetypes.ChangeNotetypeRequest {
-        const input = this.info.input as Notetypes.ChangeNotetypeRequest;
+    /** Pack changes back into input message for saving. */
+    intoInput(): ChangeNotetypeRequest {
+        const input = this.info.input as ChangeNotetypeRequest;
         input.newFields = nullToNegativeOne(this.fields);
         if (this.templates) {
             input.newTemplates = nullToNegativeOne(this.templates);
@@ -122,12 +123,12 @@ export class ChangeNotetypeState {
 
     private info_: ChangeNotetypeInfoWrapper;
     private infoSetter!: (val: ChangeNotetypeInfoWrapper) => void;
-    private notetypeNames: Notetypes.NotetypeNames;
+    private notetypeNames: NotetypeNames;
     private notetypesSetter!: (val: NotetypeListEntry[]) => void;
 
     constructor(
-        notetypes: Notetypes.NotetypeNames,
-        info: Notetypes.ChangeNotetypeInfo,
+        notetypes: NotetypeNames,
+        info: ChangeNotetypeInfo,
     ) {
         this.info_ = new ChangeNotetypeInfoWrapper(info);
         this.info = readable(this.info_, (set) => {
@@ -144,13 +145,10 @@ export class ChangeNotetypeState {
         this.info_.input().newNotetypeId = this.notetypeNames.entries[idx].id!;
         this.notetypesSetter(this.buildNotetypeList());
         const { oldNotetypeId, newNotetypeId } = this.info_.input();
-        const newInfo = await notetypes.getChangeNotetypeInfo(
-            Notetypes.GetChangeNotetypeInfoRequest.create({
-                oldNotetypeId,
-                newNotetypeId,
-            }),
-        );
-
+        const newInfo = await getChangeNotetypeInfo({
+            oldNotetypeId,
+            newNotetypeId,
+        });
         this.info_ = new ChangeNotetypeInfoWrapper(newInfo);
         this.info_.unusedItems(MapContext.Field);
         this.infoSetter(this.info_);
@@ -175,7 +173,7 @@ export class ChangeNotetypeState {
         this.infoSetter(this.info_);
     }
 
-    dataForSaving(): Notetypes.ChangeNotetypeRequest {
+    dataForSaving(): ChangeNotetypeRequest {
         return this.info_.intoInput();
     }
 
@@ -184,7 +182,7 @@ export class ChangeNotetypeState {
             alert("No changes to save");
             return;
         }
-        await notetypes.changeNotetype(this.dataForSaving());
+        await changeNotetype(this.dataForSaving());
     }
 
     private buildNotetypeList(): NotetypeListEntry[] {

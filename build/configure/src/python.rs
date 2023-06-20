@@ -29,14 +29,10 @@ pub fn setup_venv(build: &mut Build) -> Result<()> {
     } else {
         inputs![
             "python/requirements.dev.txt",
-            if cfg!(target_os = "macos") {
-                "python/requirements.qt6_3.txt"
-            } else {
-                "python/requirements.qt6_4.txt"
-            }
+            "python/requirements.qt6_5.txt",
         ]
     };
-    build.add(
+    build.add_action(
         "pyenv",
         PythonEnvironment {
             folder: "pyenv",
@@ -61,7 +57,7 @@ pub fn setup_venv(build: &mut Build) -> Result<()> {
         reqs_qt5 = inputs![reqs_qt5, "python/requirements.win.txt"];
     }
 
-    build.add(
+    build.add_action(
         "pyenv-qt5.15",
         PythonEnvironment {
             folder: "pyenv-qt5.15",
@@ -70,7 +66,7 @@ pub fn setup_venv(build: &mut Build) -> Result<()> {
             extra_binary_exports: &[],
         },
     )?;
-    build.add(
+    build.add_action(
         "pyenv-qt5.14",
         PythonEnvironment {
             folder: "pyenv-qt5.14",
@@ -112,6 +108,10 @@ impl BuildAction for GenPythonProto {
         build.add_inputs("protoc", inputs!["$protoc_binary"]);
         build.add_inputs("protoc-gen-mypy", inputs![":pyenv:protoc-gen-mypy"]);
         build.add_outputs("", python_outputs);
+        // not a direct dependency, but we include the output interface in our declared
+        // outputs
+        build.add_inputs("", inputs![":rslib:proto"]);
+        build.add_outputs("", vec!["pylib/anki/_backend_generated.py"]);
     }
 }
 
@@ -159,7 +159,7 @@ pub fn check_python(build: &mut Build) -> Result<()> {
     python_format(build, "ftl", inputs![glob!("ftl/**/*.py")])?;
     python_format(build, "tools", inputs![glob!("tools/**/*.py")])?;
 
-    build.add(
+    build.add_action(
         "check:mypy",
         PythonTypecheck {
             folders: &[
@@ -175,8 +175,8 @@ pub fn check_python(build: &mut Build) -> Result<()> {
             ],
             deps: inputs![
                 glob!["{pylib,ftl,qt}/**/*.{py,pyi}"],
-                ":pylib/anki",
-                ":qt/aqt"
+                ":pylib:anki",
+                ":qt:aqt"
             ],
         },
     )?;
@@ -190,18 +190,18 @@ fn add_pylint(build: &mut Build) -> Result<()> {
     // pylint does not support PEP420 implicit namespaces split across import paths,
     // so we need to merge our pylib sources and generated files before invoking it,
     // and add a top-level __init__.py
-    build.add(
-        "pylint/anki",
+    build.add_action(
+        "check:pylint:copy_pylib",
         RsyncFiles {
-            inputs: inputs![":pylib/anki"],
+            inputs: inputs![":pylib:anki"],
             target_folder: "pylint/anki",
             strip_prefix: "$builddir/pylib/anki",
             // avoid copying our large rsbridge binary
             extra_args: "--links",
         },
     )?;
-    build.add(
-        "pylint/anki",
+    build.add_action(
+        "check:pylint:copy_pylib",
         RsyncFiles {
             inputs: inputs![glob!["pylib/anki/**"]],
             target_folder: "pylint/anki",
@@ -209,8 +209,8 @@ fn add_pylint(build: &mut Build) -> Result<()> {
             extra_args: "",
         },
     )?;
-    build.add(
-        "pylint/anki",
+    build.add_action(
+        "check:pylint:copy_pylib",
         RunCommand {
             command: ":pyenv:bin",
             args: "$script $out",
@@ -218,7 +218,7 @@ fn add_pylint(build: &mut Build) -> Result<()> {
             outputs: hashmap! { "out" => vec!["pylint/anki/__init__.py"] },
         },
     )?;
-    build.add(
+    build.add_action(
         "check:pylint",
         PythonLint {
             folders: &[
@@ -231,52 +231,12 @@ fn add_pylint(build: &mut Build) -> Result<()> {
             ],
             pylint_ini: inputs![".pylintrc"],
             deps: inputs![
-                ":pylint/anki",
-                ":qt/aqt",
+                ":check:pylint:copy_pylib",
+                ":qt:aqt",
                 glob!("{pylib/tools,ftl,qt,python,tools}/**/*.py")
             ],
         },
     )?;
 
-    Ok(())
-}
-
-pub fn check_copyright(build: &mut Build) -> Result<()> {
-    let script = inputs!["tools/copyright_headers.py"];
-    let files = inputs![glob![
-        "{build,rslib,pylib,qt,ftl,python,sass,tools,ts}/**/*.{py,rs,ts,svelte,mjs}",
-        "qt/bundle/PyOxidizer/**"
-    ]];
-    build.add(
-        "check:copyright",
-        RunCommand {
-            command: "$runner",
-            args: "run --stamp=$out $pyenv_bin $script check",
-            inputs: hashmap! {
-                "pyenv_bin" => inputs![":pyenv:bin"],
-                "script" => script.clone(),
-                "script" => script.clone(),
-                "" => files.clone(),
-            },
-            outputs: hashmap! {
-                "out" => vec!["tests/copyright.check.marker"]
-            },
-        },
-    )?;
-    build.add(
-        "fix:copyright",
-        RunCommand {
-            command: "$runner",
-            args: "run --stamp=$out $pyenv_bin $script fix",
-            inputs: hashmap! {
-                "pyenv_bin" => inputs![":pyenv:bin"],
-                "script" => script,
-                "" => files,
-            },
-            outputs: hashmap! {
-                "out" => vec!["tests/copyright.fix.marker"]
-            },
-        },
-    )?;
     Ok(())
 }

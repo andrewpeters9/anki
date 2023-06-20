@@ -26,13 +26,14 @@ type AnkiPackages =
     | "anki/theme"
     | "anki/location"
     | "anki/surround"
-    | "anki/ui";
+    | "anki/ui"
+    | "anki/reviewer";
 type PackageDeprecation<T extends Record<string, unknown>> = {
     [key in keyof T]?: string;
 };
 
-/// This can be extended to allow require() calls at runtime, for packages
-/// that are not included at bundling time.
+/** This can be extended to allow require() calls at runtime, for packages
+that are not included at bundling time. */
 const runtimePackages: Partial<Record<AnkiPackages, Record<string, unknown>>> = {};
 const prohibit = () => false;
 

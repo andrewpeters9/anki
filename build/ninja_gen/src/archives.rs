@@ -88,7 +88,7 @@ impl BuildAction for DownloadArchive {
         let (_, filename) = self.archive.url.rsplit_once('/').unwrap();
         let output_path = Utf8Path::new("download").join(filename);
 
-        build.add_inputs("archives_bin", inputs![":build:archives"]);
+        build.add_order_only_inputs("archives_bin", inputs![":build:archives"]);
         build.add_variable("url", self.archive.url);
         build.add_variable("checksum", self.archive.sha256);
         build.add_outputs("out", &[output_path.into_string()])
@@ -96,6 +96,10 @@ impl BuildAction for DownloadArchive {
 
     fn on_first_instance(&self, build: &mut Build) -> Result<()> {
         build_archive_tool(build)
+    }
+
+    fn check_output_timestamps(&self) -> bool {
+        true
     }
 }
 
@@ -131,7 +135,7 @@ where
     }
 
     fn files(&mut self, build: &mut impl crate::build::FilesHandle) {
-        build.add_inputs("archive_tool", inputs![":build:archives"]);
+        build.add_order_only_inputs("archive_tool", inputs![":build:archives"]);
         build.add_inputs("in", inputs![self.archive_path.clone()]);
 
         let folder = self.extraction_folder();
@@ -155,12 +159,16 @@ where
     fn name(&self) -> &'static str {
         "extract"
     }
+
+    fn check_output_timestamps(&self) -> bool {
+        true
+    }
 }
 
 fn build_archive_tool(build: &mut Build) -> Result<()> {
     build.once_only("build_archive_tool", |build| {
         let features = Platform::tls_feature();
-        build.add(
+        build.add_action(
             "build:archives",
             CargoBuild {
                 inputs: inputs![glob!("build/archives/**/*")],
@@ -186,10 +194,10 @@ where
     I::Item: AsRef<str>,
 {
     let download_group = format!("download:{group_name}");
-    build.add(&download_group, DownloadArchive { archive })?;
+    build.add_action(&download_group, DownloadArchive { archive })?;
 
     let extract_group = format!("extract:{group_name}");
-    build.add(
+    build.add_action(
         extract_group,
         ExtractArchive {
             archive_path: inputs![format!(":{download_group}")],

@@ -10,8 +10,6 @@ package anki.collection;
 import "anki/generic.proto";
 
 service CollectionService {
-  rpc OpenCollection(OpenCollectionRequest) returns (generic.Empty);
-  rpc CloseCollection(CloseCollectionRequest) returns (generic.Empty);
   rpc CheckDatabase(generic.Empty) returns (CheckDatabaseResponse);
   rpc GetUndoStatus(generic.Empty) returns (UndoStatus);
   rpc Undo(generic.Empty) returns (OpChangesAfterUndo);
@@ -20,6 +18,11 @@ service CollectionService {
   rpc MergeUndoEntries(generic.UInt32) returns (OpChanges);
   rpc LatestProgress(generic.Empty) returns (Progress);
   rpc SetWantsAbort(generic.Empty) returns (generic.Empty);
+}
+
+service BackendCollectionService {
+  rpc OpenCollection(OpenCollectionRequest) returns (generic.Empty);
+  rpc CloseCollection(CloseCollectionRequest) returns (generic.Empty);
   // Create a no-media backup. Caller must ensure there is no active
   // transaction. Unlike a collection export, does not require reopening the DB,
   // as there is no downgrade step.

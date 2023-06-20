@@ -4,8 +4,8 @@
 import "intl-pluralrules";
 
 import { FluentBundle, FluentResource } from "@fluent/bundle";
+import { i18nResources } from "@tslib/anki/i18n_service";
 
-import { I18n, i18n } from "../proto";
 import { firstLanguage, setBundles } from "./bundles";
 import type { ModuleName } from "./modules";
 
@@ -64,8 +64,8 @@ export function localeCompare(
     return first.localeCompare(second, langs, options);
 }
 
-/// Treat text like HTML, merging multiple spaces and converting
-/// newlines to spaces.
+/** Treat text like HTML, merging multiple spaces and converting
+ newlines to spaces. */
 export function withCollapsedWhitespace(s: string): string {
     return s.replace(/\s+/g, " ");
 }
@@ -75,7 +75,7 @@ export function withoutUnicodeIsolation(s: string): string {
 }
 
 export async function setupI18n(args: { modules: ModuleName[] }): Promise<void> {
-    const resources = await i18n.i18nResources(I18n.I18nResourcesRequest.create(args));
+    const resources = await i18nResources(args);
     const json = JSON.parse(new TextDecoder().decode(resources.json));
 
     const newBundles: FluentBundle[] = [];

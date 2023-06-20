@@ -267,12 +267,12 @@ impl Collection {
 
 #[cfg(test)]
 mod test {
+    use anki_proto::deckconfig::deck_config::config::NewCardGatherPriority;
+    use anki_proto::deckconfig::deck_config::config::NewCardSortOrder;
+
     use super::*;
     use crate::card::CardQueue;
     use crate::card::CardType;
-    use crate::collection::open_test_collection;
-    use crate::pb::deckconfig::deck_config::config::NewCardGatherPriority;
-    use crate::pb::deckconfig::deck_config::config::NewCardSortOrder;
 
     impl Collection {
         fn set_deck_gather_order(&mut self, deck: &mut Deck, order: NewCardGatherPriority) {
@@ -346,9 +346,9 @@ mod test {
         // ┣━━child━━grandchild
         // ┗━━child_2
         let mut parent = DeckAdder::new("parent").add(&mut col);
-        let mut child = DeckAdder::new("parent\x1fchild").add(&mut col);
-        let child_2 = DeckAdder::new("parent\x1fchild_2").add(&mut col);
-        let grandchild = DeckAdder::new("parent\x1fchild\x1fgrandchild").add(&mut col);
+        let mut child = DeckAdder::new("parent::child").add(&mut col);
+        let child_2 = DeckAdder::new("parent::child_2").add(&mut col);
+        let grandchild = DeckAdder::new("parent::child::grandchild").add(&mut col);
 
         // add 2 new cards to each deck
         for deck in [&parent, &child, &child_2, &grandchild] {
@@ -402,7 +402,7 @@ mod test {
 
     #[test]
     fn review_queue_building() -> Result<()> {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
         col.set_config_bool(BoolKey::Sched2021, true, false)?;
 
         let mut deck = col.get_or_create_normal_deck("Default").unwrap();
@@ -489,5 +489,15 @@ mod test {
 
         // review limit doesn't apply to new card
         assert_eq!(col.card_queue_len(), 1);
+    }
+
+    #[test]
+    fn reviews_dont_affect_new_limit_before_review_limit_is_reached() {
+        let mut col = Collection::new_v3();
+        col.update_default_deck_config(|config| {
+            config.new_per_day = 1;
+        });
+        CardAdder::new().siblings(2).due_dates(["0"]).add(&mut col);
+        assert_eq!(col.card_queue_len(), 2);
     }
 }

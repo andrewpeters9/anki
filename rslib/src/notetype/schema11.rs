@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
-use serde_derive::Deserialize;
-use serde_derive::Serialize;
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 use serde_repr::Deserialize_repr;
 use serde_repr::Serialize_repr;
@@ -23,6 +23,7 @@ use crate::notetype::NotetypeConfig;
 use crate::serde::default_on_invalid;
 use crate::serde::deserialize_bool_from_anything;
 use crate::serde::deserialize_number_from_string;
+use crate::serde::is_default;
 use crate::timestamp::TimestampSecs;
 use crate::types::Usn;
 
@@ -59,6 +60,8 @@ pub struct NotetypeSchema11 {
     pub latexsvg: bool,
     #[serde(default, deserialize_with = "default_on_invalid")]
     pub(crate) req: CardRequirementsSchema11,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub(crate) original_stock_kind: i32,
     #[serde(flatten)]
     pub(crate) other: HashMap<String, Value>,
 }
@@ -103,6 +106,7 @@ impl From<NotetypeSchema11> for Notetype {
                 latex_post: nt.latex_post,
                 latex_svg: nt.latexsvg,
                 reqs: nt.req.0.into_iter().map(Into::into).collect(),
+                original_stock_kind: nt.original_stock_kind,
                 other: other_to_bytes(&nt.other),
             },
             fields: nt.flds.into_iter().map(Into::into).collect(),
@@ -160,15 +164,9 @@ impl From<Notetype> for NotetypeSchema11 {
             latex_post: c.latex_post,
             latexsvg: c.latex_svg,
             req: CardRequirementsSchema11(c.reqs.into_iter().map(Into::into).collect()),
+            original_stock_kind: c.original_stock_kind,
             other: bytes_to_other(&c.other),
         }
-    }
-}
-
-/// See [crate::deckconfig::schema11::clear_other_duplicates()].
-fn clear_other_field_duplicates(other: &mut HashMap<String, Value>) {
-    for key in &["description", "plainText", "collapsed"] {
-        other.remove(*key);
     }
 }
 
@@ -214,7 +212,6 @@ pub struct NoteFieldSchema11 {
 
     // This was not in schema 11, but needs to be listed here so that the setting is not lost
     // on downgrade/upgrade.
-    // NOTE: if adding new ones, make sure to update clear_other_field_duplicates()
     #[serde(default, deserialize_with = "default_on_invalid")]
     pub(crate) description: String,
 
@@ -223,6 +220,9 @@ pub struct NoteFieldSchema11 {
 
     #[serde(default, deserialize_with = "default_on_invalid")]
     pub(crate) collapsed: bool,
+
+    #[serde(default, deserialize_with = "default_on_invalid")]
+    pub(crate) exclude_from_search: bool,
 
     #[serde(flatten)]
     pub(crate) other: HashMap<String, Value>,
@@ -240,6 +240,7 @@ impl Default for NoteFieldSchema11 {
             size: 20,
             description: String::new(),
             collapsed: false,
+            exclude_from_search: false,
             other: Default::default(),
         }
     }
@@ -258,6 +259,7 @@ impl From<NoteFieldSchema11> for NoteField {
                 font_size: f.size as u32,
                 description: f.description,
                 collapsed: f.collapsed,
+                exclude_from_search: f.exclude_from_search,
                 other: other_to_bytes(&f.other),
             },
         }
@@ -269,8 +271,6 @@ impl From<NoteFieldSchema11> for NoteField {
 impl From<NoteField> for NoteFieldSchema11 {
     fn from(p: NoteField) -> Self {
         let conf = p.config;
-        let mut other = bytes_to_other(&conf.other);
-        clear_other_field_duplicates(&mut other);
         NoteFieldSchema11 {
             name: p.name,
             ord: p.ord.map(|o| o as u16),
@@ -281,7 +281,8 @@ impl From<NoteField> for NoteFieldSchema11 {
             size: conf.font_size as u16,
             description: conf.description,
             collapsed: conf.collapsed,
-            other,
+            exclude_from_search: conf.exclude_from_search,
+            other: bytes_to_other(&conf.other),
         }
     }
 }

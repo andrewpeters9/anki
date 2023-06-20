@@ -19,6 +19,7 @@ preferences-preferences = Preferences
 preferences-scheduling = Scheduling
 preferences-show-learning-cards-with-larger-steps = Show learning cards with larger steps before reviews
 preferences-show-next-review-time-above-answer = Show next review time above answer buttons
+preferences-spacebar-rates-card = Spacebar (or enter) also answers card
 preferences-show-play-buttons-on-cards-with = Show play buttons on cards with audio
 preferences-show-remaining-card-count = Show remaining card count
 preferences-some-settings-will-take-effect-after = Some settings will take effect after you restart Anki.
@@ -57,6 +58,7 @@ preferences-appearance = Appearance
 preferences-general = General
 preferences-style = Style
 preferences-review = Review
+preferences-answer-keys = Answer keys
 preferences-distractions = Distractions
 preferences-minimalist-mode = Minimalist mode
 preferences-editing = Editing
@@ -70,6 +72,7 @@ preferences-import-export = Import/Export
 preferences-network-timeout = Network timeout
 preferences-reset-window-sizes = Reset Window Sizes
 preferences-reset-window-sizes-complete = Window sizes and locations have been reset.
+preferences-shortcut-placeholder = Enter an unused shortcut key, or leave empty to disable.
 
 ## NO NEED TO TRANSLATE. This text is no longer used by Anki, and will be removed in the future.
 

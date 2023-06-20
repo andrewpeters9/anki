@@ -14,7 +14,7 @@ pub struct ConfigureBuild {}
 
 impl BuildAction for ConfigureBuild {
     fn command(&self) -> &str {
-        "$cmd && ninja -f $builddir/build.ninja -t cleandead"
+        "$cmd"
     }
 
     fn files(&mut self, build: &mut impl FilesHandle) {
@@ -25,7 +25,7 @@ impl BuildAction for ConfigureBuild {
     }
 
     fn on_first_instance(&self, build: &mut Build) -> Result<()> {
-        build.add(
+        build.add_action(
             "build:configure",
             CargoBuild {
                 inputs: inputs![glob!["build/**/*"]],

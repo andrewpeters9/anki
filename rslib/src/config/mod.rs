@@ -9,6 +9,7 @@ pub(crate) mod schema11;
 mod string;
 pub(crate) mod undo;
 
+use anki_proto::config::preferences::BackupLimits;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_repr::Deserialize_repr;
@@ -20,7 +21,6 @@ pub use self::deck::DeckConfigKey;
 pub use self::notetype::get_aux_notetype_config_key;
 pub use self::number::I32ConfigKey;
 pub use self::string::StringKey;
-use crate::pb::config::preferences::BackupLimits;
 use crate::prelude::*;
 
 /// Only used when updating/undoing.
@@ -287,16 +287,12 @@ impl Collection {
 }
 
 // 2021 scheduler moves this into deck config
+#[derive(Default)]
 pub(crate) enum NewReviewMix {
+    #[default]
     Mix = 0,
     ReviewsFirst = 1,
     NewFirst = 2,
-}
-
-impl Default for NewReviewMix {
-    fn default() -> Self {
-        NewReviewMix::Mix
-    }
 }
 
 #[derive(PartialEq, Eq, Serialize_repr, Deserialize_repr, Clone, Copy)]
@@ -310,18 +306,17 @@ pub(crate) enum Weekday {
 
 #[cfg(test)]
 mod test {
-    use crate::collection::open_test_collection;
-    use crate::decks::DeckId;
+    use super::*;
 
     #[test]
     fn defaults() {
-        let col = open_test_collection();
+        let col = Collection::new();
         assert_eq!(col.get_current_deck_id(), DeckId(1));
     }
 
     #[test]
     fn get_set() {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         // missing key
         assert_eq!(col.get_config_optional::<Vec<i64>, _>("test"), None);

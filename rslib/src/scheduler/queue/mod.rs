@@ -9,6 +9,7 @@ pub(crate) mod undo;
 
 use std::collections::VecDeque;
 
+use anki_proto::scheduler::SchedulingContext;
 pub(crate) use builder::DueCard;
 pub(crate) use builder::DueCardKind;
 pub(crate) use builder::NewCard;
@@ -56,6 +57,7 @@ pub struct QueuedCard {
     pub card: Card,
     pub kind: QueueEntryKind,
     pub states: SchedulingStates,
+    pub context: SchedulingContext,
 }
 
 #[derive(Debug)]
@@ -116,6 +118,7 @@ impl Collection {
                 let next_states = self.get_scheduling_states(card.id)?;
 
                 Ok(QueuedCard {
+                    context: new_scheduling_context(self, &card)?,
                     card,
                     states: next_states,
                     kind: entry.kind(),
@@ -129,6 +132,16 @@ impl Collection {
             review_count: counts.review,
         })
     }
+}
+
+fn new_scheduling_context(col: &mut Collection, card: &Card) -> Result<SchedulingContext> {
+    Ok(SchedulingContext {
+        deck_name: col
+            .get_deck(card.original_or_current_deck_id())?
+            .or_not_found(card.deck_id)?
+            .human_name(),
+        seed: card.review_seed(),
+    })
 }
 
 impl CardQueues {

@@ -179,7 +179,6 @@ def package_name_valid(name: str) -> bool:
 
 # fixme: this class should not have any GUI code in it
 class AddonManager:
-
     exts: list[str] = [".ankiaddon", ".zip"]
     _manifest_schema: dict = {
         "type": "object",
@@ -427,7 +426,9 @@ class AddonManager:
             conflicts = manifest.get("conflicts", [])
             found_conflicts = self._disableConflicting(package, conflicts)
             meta = self.addonMeta(package)
+            gui_hooks.addon_manager_will_install_addon(self, package)
             self._install(package, zfile)
+            gui_hooks.addon_manager_did_install_addon(self, package)
 
         schema = self._manifest_schema["properties"]
         manifest_meta = {
@@ -451,10 +452,11 @@ class AddonManager:
         base = self.addonsFolder(module)
         if os.path.exists(base):
             self.backupUserFiles(module)
-            if not self.deleteAddon(module):
+            try:
+                self.deleteAddon(module)
+            except Exception:
                 self.restoreUserFiles(module)
-                return
-
+                raise
         os.mkdir(base)
         self.restoreUserFiles(module)
 
@@ -470,17 +472,8 @@ class AddonManager:
                 continue
             zfile.extract(n, base)
 
-    # true on success
-    def deleteAddon(self, module: str) -> bool:
-        try:
-            send_to_trash(Path(self.addonsFolder(module)))
-            return True
-        except OSError as e:
-            showWarning(
-                tr.addons_unable_to_update_or_delete_addon(val=str(e)),
-                textFormat="plain",
-            )
-            return False
+    def deleteAddon(self, module: str) -> None:
+        send_to_trash(Path(self.addonsFolder(module)))
 
     # Processing local add-on files
     ######################################################################
@@ -491,7 +484,6 @@ class AddonManager:
         parent: QWidget | None = None,
         force_enable: bool = False,
     ) -> tuple[list[str], list[str]]:
-
         log = []
         errs = []
 
@@ -520,7 +512,6 @@ class AddonManager:
     def _installationErrorReport(
         self, result: InstallError, base: str, mode: str = "download"
     ) -> list[str]:
-
         messages = {
             "zip": tr.addons_corrupt_addon_file(),
             "manifest": tr.addons_invalid_addon_manifest(),
@@ -538,7 +529,6 @@ class AddonManager:
     def _installationSuccessReport(
         self, result: InstallOk, base: str, mode: str = "download"
     ) -> list[str]:
-
         name = result.name or base
         if mode == "download":
             template = tr.addons_downloaded_fnames(fname=name)
@@ -916,12 +906,17 @@ class AddonsDialog(QDialog):
         if not askUser(tr.addons_delete_the_numd_selected_addon(count=len(selected))):
             return
         gui_hooks.addons_dialog_will_delete_addons(self, selected)
-        for module in selected:
-            # doing this before deleting, as `enabled` is always True afterwards
-            if self.mgr.addon_meta(module).enabled:
-                self._require_restart = True
-            if not self.mgr.deleteAddon(module):
-                break
+        try:
+            for module in selected:
+                # doing this before deleting, as `enabled` is always True afterwards
+                if self.mgr.addon_meta(module).enabled:
+                    self._require_restart = True
+                self.mgr.deleteAddon(module)
+        except OSError as e:
+            showWarning(
+                tr.addons_unable_to_update_or_delete_addon(val=str(e)),
+                textFormat="plain",
+            )
         self.form.addonList.clearSelection()
         self.redrawAddons()
 
@@ -1188,6 +1183,7 @@ class DownloaderInstaller(QObject):
 
     def _download_done(self, future: Future) -> None:
         self.mgr.mw.progress.finish()
+        future.result()
         # qt gets confused if on_done() opens new windows while the progress
         # modal is still cleaning up
         self.mgr.mw.progress.single_shot(50, lambda: self.on_done(self.log))
@@ -1661,7 +1657,6 @@ def installAddonPackages(
     advise_restart: bool = False,
     force_enable: bool = False,
 ) -> bool:
-
     if warn:
         names = ",<br>".join(f"<b>{os.path.basename(p)}</b>" for p in paths)
         q = tr.addons_important_as_addons_are_programs_downloaded() % dict(names=names)

@@ -100,6 +100,10 @@ fn build_installer(
         bundle_root.join("fileassoc.nsh"),
         include_str!("../fileassoc.nsh"),
     )?;
+    fs::copy(
+        "out/extracted/nsis_plugins/nsProcess.dll",
+        bundle_root.join("nsProcess.dll"),
+    )?;
     let mut cmd = Command::new("c:/program files (x86)/nsis/makensis.exe");
     cmd.arg("-V3");
     if uninstaller {

@@ -9,15 +9,18 @@ import "css-browser-selector/css_browser_selector.min";
 
 export { default as $, default as jQuery } from "jquery/dist/jquery";
 
+import { setupImageCloze } from "../image-occlusion/review";
 import { mutateNextCardStates } from "./answering";
 
 globalThis.anki = globalThis.anki || {};
 globalThis.anki.mutateNextCardStates = mutateNextCardStates;
+globalThis.anki.setupImageCloze = setupImageCloze;
 
 import { bridgeCommand } from "@tslib/bridgecommand";
+import { registerPackage } from "@tslib/runtime-require";
 
-import { maybePreloadExternalCss } from "./css";
-import { allImagesLoaded, maybePreloadImages, preloadAnswerImages } from "./images";
+import { allImagesLoaded, preloadAnswerImages } from "./images";
+import { preloadResources } from "./preload";
 
 declare const MathJax: any;
 
@@ -129,11 +132,7 @@ export async function _updateQA(
 
     const qa = document.getElementById("qa")!;
 
-    // prevent flash of unstyled content when external css used
-    await maybePreloadExternalCss(html);
-
-    // prevent flickering & layout shift on image load
-    await maybePreloadImages(html);
+    await preloadResources(html);
 
     qa.style.opacity = "0";
 
@@ -181,7 +180,7 @@ export function _showQuestion(q: string, a: string, bodyclass: string): void {
                     typeans.focus();
                 }
                 // preload images
-                allImagesLoaded().then(() => preloadAnswerImages(q, a));
+                allImagesLoaded().then(() => preloadAnswerImages(a));
             },
         )
     );
@@ -247,7 +246,7 @@ export function _blockDefaultDragDropBehavior(): void {
 // https://github.com/ankitects/anki/issues/1952
 const dummyButton = document.createElement("button");
 dummyButton.style.position = "absolute";
-dummyButton.style.left = "-9999px";
+dummyButton.style.opacity = "0";
 document.addEventListener("focusout", (event) => {
     // Prevent type box from losing focus when switching IMEs
     if (!document.hasFocus()) {
@@ -256,8 +255,20 @@ document.addEventListener("focusout", (event) => {
 
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        dummyButton.style.left = `${window.scrollX}px`;
+        dummyButton.style.top = `${window.scrollY}px`;
         document.body.appendChild(dummyButton);
         dummyButton.focus();
         document.body.removeChild(dummyButton);
     }
+});
+
+registerPackage("anki/reviewer", {
+    // If you append a function to this each time the question or answer
+    // is shown, it will be called before MathJax has been rendered.
+    onUpdateHook,
+    // If you append a function to this each time the question or answer
+    // is shown, it will be called after images have been preloaded and
+    // MathJax has been rendered.
+    onShownHook,
 });

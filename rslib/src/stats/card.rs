@@ -3,12 +3,11 @@
 
 use crate::card::CardQueue;
 use crate::card::CardType;
-use crate::pb;
 use crate::prelude::*;
 use crate::revlog::RevlogEntry;
 
 impl Collection {
-    pub fn card_stats(&mut self, cid: CardId) -> Result<pb::stats::CardStatsResponse> {
+    pub fn card_stats(&mut self, cid: CardId) -> Result<anki_proto::stats::CardStatsResponse> {
         let card = self.storage.get_card(cid)?.or_not_found(cid)?;
         let note = self
             .storage
@@ -26,7 +25,7 @@ impl Collection {
         let (average_secs, total_secs) = average_and_total_secs_strings(&revlog);
         let (due_date, due_position) = self.due_date_and_position(&card)?;
 
-        Ok(pb::stats::CardStatsResponse {
+        Ok(anki_proto::stats::CardStatsResponse {
             card_id: card.id.into(),
             note_id: card.note_id.into(),
             deck: deck.human_name(),
@@ -92,8 +91,10 @@ fn average_and_total_secs_strings(revlog: &[RevlogEntry]) -> (f32, f32) {
     }
 }
 
-fn stats_revlog_entry(entry: &RevlogEntry) -> pb::stats::card_stats_response::StatsRevlogEntry {
-    pb::stats::card_stats_response::StatsRevlogEntry {
+fn stats_revlog_entry(
+    entry: &RevlogEntry,
+) -> anki_proto::stats::card_stats_response::StatsRevlogEntry {
+    anki_proto::stats::card_stats_response::StatsRevlogEntry {
         time: entry.id.as_secs().0,
         review_kind: entry.review_kind.into(),
         button_chosen: entry.button_chosen as u32,
@@ -106,12 +107,11 @@ fn stats_revlog_entry(entry: &RevlogEntry) -> pb::stats::card_stats_response::St
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::collection::open_test_collection;
     use crate::search::SortMode;
 
     #[test]
     fn stats() -> Result<()> {
-        let mut col = open_test_collection();
+        let mut col = Collection::new();
 
         let nt = col.get_notetype_by_name("Basic")?.unwrap();
         let mut note = nt.new_note();

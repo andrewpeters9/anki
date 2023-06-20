@@ -50,7 +50,7 @@ body {
         @include scrollbar.custom;
     }
     &.reduce-motion,
-    &.reduce-motion * {
+    &.reduce-motion *:not(.no-reduce-motion) {
         transition: none !important;
         animation: none !important;
     }
@@ -64,7 +64,7 @@ body {
     }
 }
 
-button {
+button:not(.btn,.btn-close) {
     /* override transition for instant hover response */
     transition: color var(--transition) ease-in-out, box-shadow var(--transition) ease-in-out !important;
     border-radius: prop(border-radius);
@@ -76,11 +76,6 @@ code,
 kbd,
 samp {
     unicode-bidi: normal !important;
-}
-
-.reduce-motion * {
-    transition: none !important;
-    animation: none !important;
 }
 
 label,
