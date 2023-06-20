@@ -5,6 +5,7 @@ set -e
 
 PATH=../out/extracted/node/bin
 
+# @TODO: https://github.com/koalaman/shellcheck/wiki/SC2048
 ../out/extracted/node/bin/yarn $*
 
 cd ..
