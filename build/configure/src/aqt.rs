@@ -1,6 +1,7 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+use anyhow::Result;
 use ninja_gen::action::BuildAction;
 use ninja_gen::command::RunCommand;
 use ninja_gen::copy::CopyFile;
@@ -14,7 +15,6 @@ use ninja_gen::node::TypescriptCheck;
 use ninja_gen::python::python_format;
 use ninja_gen::python::PythonTest;
 use ninja_gen::Build;
-use ninja_gen::Result;
 use ninja_gen::Utf8Path;
 use ninja_gen::Utf8PathBuf;
 
@@ -136,11 +136,7 @@ fn build_css(build: &mut Build) -> Result<()> {
         )?;
     }
     let other_ts_css = build.inputs_with_suffix(
-        inputs![
-            ":ts:editor",
-            ":ts:pages:editable",
-            ":ts:reviewer:reviewer.css"
-        ],
+        inputs![":ts:editor", ":ts:editable", ":ts:reviewer:reviewer.css"],
         ".css",
     );
     build.add_action(

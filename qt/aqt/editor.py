@@ -31,6 +31,7 @@ from anki.collection import Config, SearchNode
 from anki.consts import MODEL_CLOZE
 from anki.hooks import runFilter
 from anki.httpclient import HttpClient
+from anki.models import StockNotetype
 from anki.notes import Note, NoteFieldsCheckResult
 from anki.utils import checksum, is_lin, is_win, namedtmp
 from aqt import AnkiQt, colors, gui_hooks
@@ -147,23 +148,24 @@ class Editor:
 
     def setupWeb(self) -> None:
         if self.editorMode == EditorMode.ADD_CARDS:
-            file = "note_creator"
+            mode = "add"
         elif self.editorMode == EditorMode.BROWSER:
-            file = "browser_editor"
+            mode = "browse"
         else:
-            file = "reviewer_editor"
+            mode = "review"
 
         # then load page
         self.web.stdHtml(
             "",
-            css=[f"css/{file}.css"],
+            css=["css/editor.css"],
             js=[
                 "js/mathjax.js",
-                f"js/{file}.js",
+                "js/editor.js",
             ],
             context=self,
             default_css=False,
         )
+        self.web.eval(f"setupEditor('{mode}')")
         self.web.show()
 
         lefttopbtns: list[str] = []
@@ -548,18 +550,31 @@ require("anki/ui").loaded.then(() => require("anki/NoteEditor").instances[0].too
             setShrinkImages({json.dumps(self.mw.col.get_config("shrinkEditorImages", True))});
             setCloseHTMLTags({json.dumps(self.mw.col.get_config("closeHTMLTags", True))});
             triggerChanges();
+            setIsImageOcclusion({json.dumps(self.current_notetype_is_image_occlusion())});
+            setIsEditMode({json.dumps(self.editorMode != EditorMode.ADD_CARDS)});
             """
 
         if self.addMode:
             sticky = [field["sticky"] for field in self.note.note_type()["flds"]]
             js += " setSticky(%s);" % json.dumps(sticky)
 
-        if os.getenv("ANKI_EDITOR_INSERT_SYMBOLS"):
-            js += " setInsertSymbolsEnabled();"
+        if (
+            self.editorMode != EditorMode.ADD_CARDS
+            and self.current_notetype_is_image_occlusion()
+        ):
+            mode = {"kind": "edit", "noteId": self.note.id}
+            options = {"mode": mode}
+            js += " setupMaskEditor(%s);" % json.dumps(options)
 
         js = gui_hooks.editor_will_load_note(js, self.note, self)
         self.web.evalWithCallback(
             f'require("anki/ui").loaded.then(() => {{ {js} }})', oncallback
+        )
+
+    def current_notetype_is_image_occlusion(self) -> bool:
+        return bool(self.note) and (
+            self.note.note_type().get("originalStockKind", None)
+            == StockNotetype.OriginalStockKind.ORIGINAL_STOCK_KIND_IMAGE_OCCLUSION
         )
 
     def _save_current_note(self) -> None:
@@ -969,7 +984,7 @@ require("anki/ui").loaded.then(() => require("anki/NoteEditor").instances[0].too
         self.web.onPaste()
 
     def onCutOrCopy(self) -> None:
-        self.web.flagAnkiText()
+        self.web.user_cut_or_copied()
 
     # Legacy editing routines
     ######################################################################
@@ -1177,6 +1192,40 @@ require("anki/ui").loaded.then(() => require("anki/NoteEditor").instances[0].too
     def setTagsCollapsed(self, collapsed: bool) -> None:
         aqt.mw.pm.set_tags_collapsed(self.editorMode, collapsed)
 
+    def onAddImageForOcclusion(self) -> None:
+        """Show a file selection screen, then get selected image path."""
+        extension_filter = " ".join(
+            f"*.{extension}" for extension in sorted(itertools.chain(pics))
+        )
+        filter = f"{tr.editing_media()} ({extension_filter})"
+
+        def accept(file: str) -> None:
+            try:
+                html = self._addMedia(file)
+                if self.editorMode == EditorMode.ADD_CARDS:
+                    mode = {"kind": "add", "imagePath": file, "notetypeId": 0}
+                    options = {"html": html, "mode": mode}
+                    self.web.eval(f"setupMaskEditor({json.dumps(options)})")
+                else:
+                    mode = {"kind": "edit", "notetypeId": self.note.id}
+                    options = {"html": html, "mode": mode}
+                    self.web.eval(f"resetIOImage({json.dumps(file)})")
+                    self.web.eval(f"setImageField({json.dumps(html)})")
+                    self.web.eval(f"setupMaskEditor({json.dumps(options)})")
+            except Exception as e:
+                showWarning(str(e))
+                return
+
+        file = getFile(
+            parent=self.widget,
+            title=tr.editing_add_media(),
+            cb=cast(Callable[[Any], None], accept),
+            filter=filter,
+            key="media",
+        )
+
+        self.parentWindow.activateWindow()
+
     # Links from HTML
     ######################################################################
 
@@ -1206,6 +1255,7 @@ require("anki/ui").loaded.then(() => require("anki/NoteEditor").instances[0].too
             toggleMathjax=Editor.toggleMathjax,
             toggleShrinkImages=Editor.toggleShrinkImages,
             toggleCloseHTMLTags=Editor.toggleCloseHTMLTags,
+            addImageForOcclusion=Editor.onAddImageForOcclusion,
         )
 
 
@@ -1218,15 +1268,34 @@ class EditorWebView(AnkiWebView):
         AnkiWebView.__init__(self, kind=AnkiWebViewKind.EDITOR)
         self.editor = editor
         self.setAcceptDrops(True)
-        self._markInternal = False
+        self._store_field_content_on_next_clipboard_change = False
+        # when we detect the user copying from a field, we store the content
+        # here, and use it when they paste, so we avoid filtering field content
+        self._internal_field_text_for_paste: str | None = None
         clip = self.editor.mw.app.clipboard()
-        qconnect(clip.dataChanged, self._onClipboardChange)
+        qconnect(clip.dataChanged, self._on_clipboard_change)
         gui_hooks.editor_web_view_did_init(self)
 
-    def _onClipboardChange(self) -> None:
-        if self._markInternal:
-            self._markInternal = False
-            self._flagAnkiText()
+    def user_cut_or_copied(self) -> None:
+        self._store_field_content_on_next_clipboard_change = True
+
+    def _on_clipboard_change(self) -> None:
+        if self._store_field_content_on_next_clipboard_change:
+            # if the flag was set, save the field data
+            self._internal_field_text_for_paste = self._get_clipboard_html_for_field()
+            self._store_field_content_on_next_clipboard_change = False
+        elif (
+            self._internal_field_text_for_paste != self._get_clipboard_html_for_field()
+        ):
+            # if we've previously saved the field, blank it out if the clipboard state has changed
+            self._internal_field_text_for_paste = None
+
+    def _get_clipboard_html_for_field(self):
+        clip = self.editor.mw.app.clipboard()
+        mime = clip.mimeData()
+        if not mime.hasHtml():
+            return
+        return mime.html()
 
     def onCut(self) -> None:
         self.triggerPageAction(QWebEnginePage.WebAction.Cut)
@@ -1244,11 +1313,15 @@ class EditorWebView(AnkiWebView):
 
     def _onPaste(self, mode: QClipboard.Mode) -> None:
         extended = self._wantsExtendedPaste()
-        mime = self.editor.mw.app.clipboard().mimeData(mode=mode)
-        html, internal = self._processMime(mime, extended)
-        if not html:
-            return
-        self.editor.doPaste(html, internal, extended)
+        if html := self._internal_field_text_for_paste:
+            print("reuse internal")
+            self.editor.doPaste(html, True, extended)
+        else:
+            print("use clipboard")
+            mime = self.editor.mw.app.clipboard().mimeData(mode=mode)
+            html, internal = self._processMime(mime, extended)
+            if html:
+                self.editor.doPaste(html, internal, extended)
 
     def onPaste(self) -> None:
         self._onPaste(QClipboard.Mode.Clipboard)
@@ -1285,7 +1358,7 @@ class EditorWebView(AnkiWebView):
         # print("urls", mime.urls())
         # print("text", mime.text())
 
-        internal = mime.html().startswith("<!--anki-->")
+        internal = False
 
         mime = gui_hooks.editor_will_process_mime(
             mime, self, internal, extended, drop_event
@@ -1320,8 +1393,9 @@ class EditorWebView(AnkiWebView):
         for qurl in mime.urls():
             url = qurl.toString()
             # chrome likes to give us the URL twice with a \n
-            url = url.splitlines()[0]
-            buf += self.editor.urlToLink(url)
+            if lines := url.splitlines():
+                url = lines[0]
+                buf += self.editor.urlToLink(url)
 
         return buf
 
@@ -1382,39 +1456,6 @@ class EditorWebView(AnkiWebView):
             return self.editor.fnameToLink(fname)
         return None
 
-    def flagAnkiText(self) -> None:
-        # be ready to adjust when clipboard event fires
-        self._markInternal = True
-        # workaround broken QClipboard.dataChanged() on recent Qt6 versions
-        # https://github.com/ankitects/anki/issues/1793
-        if is_win and qtmajor == 6:
-            self.editor.mw.progress.single_shot(300, self._flagAnkiText, True)
-
-    def _flagAnkiText(self) -> None:
-        # add a comment in the clipboard html so we can tell text is copied
-        # from us and doesn't need to be stripped
-        clip = self.editor.mw.app.clipboard()
-        if not is_mac and not clip.ownsClipboard():
-            return
-        mime = clip.mimeData()
-        if not mime.hasHtml():
-            return
-        html = f"<!--anki-->{mime.html()}"
-
-        def after_delay() -> None:
-            # utilities that modify the clipboard can invalidate our existing
-            # mime handle in the time it takes for the timer to fire, so we need
-            # to fetch the data again
-            mime = clip.mimeData()
-            mime.setHtml(html)
-            clip.setMimeData(mime)
-
-        # Mutter bugs out if the clipboard data is mutated in the clipboard change
-        # hook, so we need to do it after a delay. Initially 10ms appeared to be
-        # enough, but we've had a recent report than 175ms+ was required on their
-        # system.
-        aqt.mw.progress.timer(300 if is_lin else 10, after_delay, False, parent=self)
-
     def contextMenuEvent(self, evt: QContextMenuEvent) -> None:
         m = QMenu(self)
         a = m.addAction(tr.editing_cut())
@@ -1463,4 +1504,14 @@ def set_cloze_button(editor: Editor) -> None:
     )
 
 
+def set_image_occlusion_button(editor: Editor) -> None:
+    action = "show" if editor.current_notetype_is_image_occlusion() else "hide"
+    editor.web.eval(
+        'require("anki/ui").loaded.then(() =>'
+        f'require("anki/NoteEditor").instances[0].toolbar.toolbar.{action}("image-occlusion-button")'
+        "); "
+    )
+
+
 gui_hooks.editor_did_load_note.append(set_cloze_button)
+gui_hooks.editor_did_load_note.append(set_image_occlusion_button)

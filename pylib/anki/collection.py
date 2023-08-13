@@ -29,6 +29,7 @@ CardStats = stats_pb2.CardStatsResponse
 Preferences = config_pb2.Preferences
 UndoStatus = collection_pb2.UndoStatus
 OpChanges = collection_pb2.OpChanges
+OpChangesOnly = collection_pb2.OpChangesOnly
 OpChangesWithCount = collection_pb2.OpChangesWithCount
 OpChangesWithId = collection_pb2.OpChangesWithId
 OpChangesAfterUndo = collection_pb2.OpChangesAfterUndo
@@ -465,6 +466,10 @@ class Collection(DeprecatedNamesMixin):
 
     def get_image_for_occlusion(self, path: str | None) -> GetImageForOcclusionResponse:
         return self._backend.get_image_for_occlusion(path=path)
+
+    def add_image_occlusion_notetype(self) -> None:
+        "Add notetype if missing."
+        self._backend.add_image_occlusion_notetype()
 
     def add_image_occlusion_note(
         self,

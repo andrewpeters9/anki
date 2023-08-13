@@ -3,6 +3,7 @@
 
 use std::env;
 
+use anyhow::Result;
 use camino::Utf8Path;
 use maplit::hashmap;
 
@@ -14,7 +15,6 @@ use crate::hash::simple_hash;
 use crate::input::BuildInput;
 use crate::inputs;
 use crate::Build;
-use crate::Result;
 
 pub fn python_archive(platform: Platform) -> OnlineArchive {
     match platform {
@@ -75,8 +75,7 @@ pub fn setup_python(build: &mut Build) -> Result<()> {
             inputs![":extract:python:bin"]
         }
     };
-    let python_binary = build.expand_inputs(python_binary);
-    build.variable("python_binary", &python_binary[0]);
+    build.add_dependency("python_binary", python_binary);
     Ok(())
 }
 
@@ -103,7 +102,7 @@ impl BuildAction for PythonEnvironment {
             vec![path]
         };
 
-        build.add_inputs("python_binary", inputs!["$python_binary"]);
+        build.add_inputs("python_binary", inputs![":python_binary"]);
         build.add_inputs("base_requirements", &self.base_requirements_txt);
         build.add_inputs("requirements", &self.requirements_txt);
         build.add_variable("pyenv_folder", self.folder);

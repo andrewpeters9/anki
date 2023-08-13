@@ -1,6 +1,7 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+use anyhow::Result;
 use ninja_gen::action::BuildAction;
 use ninja_gen::archives::Platform;
 use ninja_gen::build::FilesHandle;
@@ -15,23 +16,23 @@ use ninja_gen::python::PythonLint;
 use ninja_gen::python::PythonTypecheck;
 use ninja_gen::rsync::RsyncFiles;
 use ninja_gen::Build;
-use ninja_gen::Result;
 
 pub fn setup_venv(build: &mut Build) -> Result<()> {
-    let requirements_txt = if cfg!(windows) {
+    let platform_deps = if cfg!(windows) {
         inputs![
-            "python/requirements.dev.txt",
-            "python/requirements.qt6_4.txt",
+            "python/requirements.qt6_win.txt",
             "python/requirements.win.txt",
         ]
+    } else if cfg!(target_os = "darwin") {
+        inputs!["python/requirements.qt6_mac.txt",]
     } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-        inputs!["python/requirements.dev.txt"]
+        // system-provided Qt on ARM64
+        inputs![]
     } else {
-        inputs![
-            "python/requirements.dev.txt",
-            "python/requirements.qt6_5.txt",
-        ]
+        // normal linux
+        inputs!["python/requirements.qt6_lin.txt"]
     };
+    let requirements_txt = inputs!["python/requirements.dev.txt", platform_deps];
     build.add_action(
         "pyenv",
         PythonEnvironment {
@@ -105,13 +106,9 @@ impl BuildAction for GenPythonProto {
             })
             .collect();
         build.add_inputs("in", &self.proto_files);
-        build.add_inputs("protoc", inputs!["$protoc_binary"]);
+        build.add_inputs("protoc", inputs![":protoc_binary"]);
         build.add_inputs("protoc-gen-mypy", inputs![":pyenv:protoc-gen-mypy"]);
         build.add_outputs("", python_outputs);
-        // not a direct dependency, but we include the output interface in our declared
-        // outputs
-        build.add_inputs("", inputs![":rslib:proto"]);
-        build.add_outputs("", vec!["pylib/anki/_backend_generated.py"]);
     }
 }
 
@@ -164,7 +161,6 @@ pub fn check_python(build: &mut Build) -> Result<()> {
         PythonTypecheck {
             folders: &[
                 "pylib",
-                "ts/lib",
                 "qt/aqt",
                 "qt/tools",
                 "out/pylib/anki",

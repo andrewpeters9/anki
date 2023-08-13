@@ -2,6 +2,7 @@
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
 pub mod backup;
+mod service;
 pub(crate) mod timestamps;
 mod transact;
 pub(crate) mod undo;
@@ -177,7 +178,8 @@ impl Collection {
         builder
             .set_media_paths(self.media_folder.clone(), self.media_db.clone())
             .set_server(self.server)
-            .set_tr(self.tr.clone());
+            .set_tr(self.tr.clone())
+            .set_shared_progress_state(self.state.progress.clone());
         builder
     }
 
@@ -219,5 +221,9 @@ impl Collection {
     pub(crate) fn clear_caches(&mut self) {
         self.state.deck_cache.clear();
         self.state.notetype_cache.clear();
+    }
+
+    pub fn tr(&self) -> &I18n {
+        &self.tr
     }
 }

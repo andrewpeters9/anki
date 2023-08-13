@@ -476,9 +476,8 @@ class AnkiQt(QMainWindow):
         self.setup_sound()
         self.flags = FlagManager(self)
         # show main window
-        if self.pm.profile.get("mainWindowState"):
-            restoreGeom(self, "mainWindow")
-            restoreState(self, "mainWindow")
+        restoreGeom(self, "mainWindow")
+        restoreState(self, "mainWindow")
         # titlebar
         self.setWindowTitle(f"{self.pm.name} - Anki")
         # show and raise window for osx
@@ -499,6 +498,8 @@ class AnkiQt(QMainWindow):
             self._refresh_after_sync()
             if onsuccess:
                 onsuccess()
+            if not self.safeMode:
+                self.maybe_check_for_addon_updates(self.setupAutoUpdate)
 
         self.maybe_auto_sync_on_open_close(_onsuccess)
 
@@ -953,7 +954,7 @@ title="{}" {}>{}</button>""".format(
             if on_done:
                 on_done()
 
-        if elap > 86_400 or self.pm.last_run_version() != point_version():
+        if elap > 86_400 or self.pm.last_run_version != point_version():
             check_and_prompt_for_updates(
                 self,
                 self.addonManager,
@@ -1034,16 +1035,10 @@ title="{}" {}>{}</button>""".format(
 
     def maybe_auto_sync_on_open_close(self, after_sync: Callable[[], None]) -> None:
         "If disabled, after_sync() is called immediately."
-
-        def after_sync_and_call_addon_update() -> None:
-            after_sync()
-            if not self.safeMode:
-                self.maybe_check_for_addon_updates(self.setupAutoUpdate)
-
         if self.can_auto_sync():
-            self._sync_collection_and_media(after_sync_and_call_addon_update)
+            self._sync_collection_and_media(after_sync)
         else:
-            after_sync_and_call_addon_update()
+            after_sync()
 
     def maybe_auto_sync_media(self) -> None:
         if self.can_auto_sync():
@@ -1107,6 +1102,7 @@ title="{}" {}>{}</button>""".format(
             ("a", self.onAddCard),
             ("b", self.onBrowse),
             ("t", self.onStats),
+            ("Shift+t", self.onStats),
             ("y", self.on_sync_button_clicked),
         ]
         self.applyShortcuts(globalShortcuts)
@@ -1155,7 +1151,6 @@ title="{}" {}>{}</button>""".format(
     ##########################################################################
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        self.pm.set_last_run_version()
         if self.state == "profileManager":
             # if profile manager active, this event may fire via OS X menu bar's
             # quit option
@@ -1673,7 +1668,9 @@ title="{}" {}>{}</button>""".format(
 
     def hideStatusTips(self) -> None:
         for action in self.findChildren(QAction):
-            cast(QAction, action).setStatusTip("")
+            # On Windows, this next line gives a 'redundant cast' error after moving to
+            # PyQt6.5.2.
+            cast(QAction, action).setStatusTip("")  # type: ignore
 
     def onMacMinimize(self) -> None:
         self.setWindowState(self.windowState() | Qt.WindowState.WindowMinimized)  # type: ignore

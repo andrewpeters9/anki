@@ -35,8 +35,9 @@ On all platforms, you will need to install:
   will be automatically downloaded if not yet installed. If removing that file
   to use a distro-provided Rust, newer Rust versions will typically work for
   building but may fail tests; older Rust versions may not work at all.
-- N2 or Ninja. On Linux/Mac, N2 gives better status output (run tools/install-n2). Ninja
-  can be downloaded from https://github.com/ninja-build/ninja/releases/tag/v1.11.1 and
+- N2 or Ninja. N2 gives better status output. You can install it with `tools/install-n2`,
+  or `bash tools\install-n2` on Windows. If you want to use Ninja, it can be downloaded
+  from https://github.com/ninja-build/ninja/releases/tag/v1.11.1 and
   placed on your path, or from your distro/homebrew if it's 1.10+.
 
 Platform-specific requirements:
@@ -94,6 +95,10 @@ When formatting issues are reported, they can be fixed with
 cargo clippy --fix
 ```
 
+## Excluding your own untracked files from formatting and checks
+
+If you want to add files or folders to the project tree that should be excluded from version tracking and not be matched by formatters and checks, place them in an `extra` folder and they will automatically be ignored.
+
 ## Optimized builds
 
 The `./run` command will create a non-optimized build by default. This is faster
@@ -105,7 +110,8 @@ To run Anki in optimized mode, use:
 ./tools/runopt
 ```
 
-Or set RELEASE=1.
+Or set RELEASE=1 or RELEASE=2. The latter will further optimize the output, but make
+the build much slower.
 
 ## Building redistributable wheels
 

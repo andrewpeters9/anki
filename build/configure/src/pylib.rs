@@ -1,6 +1,7 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+use anyhow::Result;
 use ninja_gen::action::BuildAction;
 use ninja_gen::archives::Platform;
 use ninja_gen::command::RunCommand;
@@ -11,7 +12,6 @@ use ninja_gen::inputs;
 use ninja_gen::python::python_format;
 use ninja_gen::python::PythonTest;
 use ninja_gen::Build;
-use ninja_gen::Result;
 
 use crate::anki_version;
 use crate::platform::overriden_python_target_platform;
@@ -26,22 +26,9 @@ pub fn build_pylib(build: &mut Build) -> Result<()> {
             proto_files: inputs![glob!["proto/anki/*.proto"]],
         },
     )?;
+    build.add_dependency("pylib:anki:proto", ":rslib:proto:py".into());
+    build.add_dependency("pylib:anki:i18n", ":rslib:i18n:py".into());
 
-    build.add_action(
-        "pylib:anki:_fluent.py",
-        RunCommand {
-            command: ":pyenv:bin",
-            args: "$script $strings $out",
-            inputs: hashmap! {
-                "script" => inputs!["pylib/tools/genfluent.py"],
-                "strings" => inputs![":rslib:i18n:strings.json"],
-                "" => inputs!["pylib/anki/_vendor/stringcase.py"]
-            },
-            outputs: hashmap! {
-                "out" => vec!["pylib/anki/_fluent.py"]
-            },
-        },
-    )?;
     build.add_action(
         "pylib:anki:hooks_gen.py",
         RunCommand {

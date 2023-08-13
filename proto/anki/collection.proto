@@ -20,6 +20,8 @@ service CollectionService {
   rpc SetWantsAbort(generic.Empty) returns (generic.Empty);
 }
 
+// Implicitly includes any of the above methods that are not listed in the
+// backend service.
 service BackendCollectionService {
   rpc OpenCollection(OpenCollectionRequest) returns (generic.Empty);
   rpc CloseCollection(CloseCollectionRequest) returns (generic.Empty);
@@ -31,6 +33,8 @@ service BackendCollectionService {
   // If a backup is running, wait for it to complete. Will return an error
   // if the backup encountered an error.
   rpc AwaitBackupCompletion(generic.Empty) returns (generic.Empty);
+  rpc LatestProgress(generic.Empty) returns (Progress);
+  rpc SetWantsAbort(generic.Empty) returns (generic.Empty);
 }
 
 message OpenCollectionRequest {
@@ -68,14 +72,20 @@ message OpChanges {
   bool study_queues = 10;
 }
 
+// Allows frontend code to extract changes from other messages like
+// ImportResponse without decoding other potentially large fields.
+message OpChangesOnly {
+  collection.OpChanges changes = 1;
+}
+
 message OpChangesWithCount {
-  uint32 count = 1;
-  OpChanges changes = 2;
+  OpChanges changes = 1;
+  uint32 count = 2;
 }
 
 message OpChangesWithId {
-  int64 id = 1;
-  OpChanges changes = 2;
+  OpChanges changes = 1;
+  int64 id = 2;
 }
 
 message UndoStatus {

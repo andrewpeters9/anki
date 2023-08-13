@@ -4,6 +4,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use anyhow::Result;
 use itertools::Itertools;
 
 use super::*;
@@ -52,7 +53,7 @@ impl BuildAction for YarnSetup {
     }
 
     fn files(&mut self, build: &mut impl build::FilesHandle) {
-        build.add_inputs("", inputs![":extract:node"]);
+        build.add_inputs("", inputs![":node_binary"]);
         build.add_outputs_ext(
             "bin",
             vec![if cfg!(windows) {
@@ -128,8 +129,7 @@ pub fn setup_node(
             inputs![":extract:node:bin"]
         }
     };
-    let node_binary = build.expand_inputs(node_binary);
-    build.variable("node_binary", &node_binary[0]);
+    build.add_dependency("node_binary", node_binary);
 
     match std::env::var("YARN_BINARY") {
         Ok(path) => {
@@ -176,7 +176,7 @@ impl BuildAction for EsbuildScript<'_> {
     }
 
     fn files(&mut self, build: &mut impl build::FilesHandle) {
-        build.add_inputs("node_bin", inputs!["$node_binary"]);
+        build.add_inputs("node_bin", inputs![":node_binary"]);
         build.add_inputs("script", &self.script);
         build.add_inputs("entrypoint", &self.entrypoint);
         build.add_inputs("", inputs!["yarn.lock", ":node_modules", &self.deps]);
@@ -215,7 +215,7 @@ pub struct SvelteCheck {
 impl BuildAction for SvelteCheck {
     fn command(&self) -> &str {
         "$svelte-check --tsconfig $tsconfig $
-        --fail-on-warnings --threshold warning --use-new-transformation $
+        --fail-on-warnings --threshold warning $
         --compiler-warnings $compiler_warnings"
     }
 
@@ -229,6 +229,7 @@ impl BuildAction for SvelteCheck {
             [
                 "a11y-click-events-have-key-events",
                 "a11y-no-noninteractive-tabindex",
+                "a11y-no-static-element-interactions",
             ]
             .iter()
             .map(|warning| format!("{}$:ignore", warning))
@@ -320,7 +321,7 @@ impl BuildAction for SqlFormat {
 
     fn files(&mut self, build: &mut impl build::FilesHandle) {
         build.add_inputs("tsx", inputs![":node_modules:tsx"]);
-        build.add_inputs("sql_format", inputs!["ts/sql_format/sql_format.ts"]);
+        build.add_inputs("sql_format", inputs!["ts/tools/sql_format.ts"]);
         build.add_inputs("in", &self.inputs);
         let mode = if self.check_only { "check" } else { "fix" };
         build.add_variable("mode", mode);
@@ -336,14 +337,14 @@ pub struct GenTypescriptProto<'a> {
     /// Can be used to adjust the output js/dts files to point to out_dir.
     pub out_path_transform: fn(&str) -> String,
     /// Script to apply modifications to the generated files.
-    pub py_transform_script: &'static str,
+    pub ts_transform_script: &'static str,
 }
 
 impl BuildAction for GenTypescriptProto<'_> {
     fn command(&self) -> &str {
         "$protoc $includes $in \
         --plugin $gen-es --es_out $out_dir && \
-        $pyenv_bin $script $out_dir"
+        $tsx $transform_script $out_dir"
     }
 
     fn files(&mut self, build: &mut impl build::FilesHandle) {
@@ -368,18 +369,12 @@ impl BuildAction for GenTypescriptProto<'_> {
                 .map(|d| format!("-I {d}"))
                 .join(" "),
         );
-        build.add_inputs("protoc", inputs![":extract:protoc:bin"]);
+        build.add_inputs("protoc", inputs![":protoc_binary"]);
         build.add_inputs("gen-es", inputs![":node_modules:protoc-gen-es"]);
-        if cfg!(windows) {
-            build.add_env_var(
-                "PATH",
-                &format!("node_modules/.bin;{}", std::env::var("PATH").unwrap()),
-            );
-        }
         build.add_inputs_vec("in", proto_files);
         build.add_inputs("", inputs!["yarn.lock"]);
-        build.add_inputs("pyenv_bin", inputs![":pyenv:bin"]);
-        build.add_inputs("script", inputs![self.py_transform_script]);
+        build.add_inputs("tsx", inputs![":node_modules:tsx"]);
+        build.add_inputs("transform_script", inputs![self.ts_transform_script]);
 
         build.add_outputs("", output_files);
     }
@@ -423,7 +418,7 @@ pub struct CompileTypescript<'a> {
 
 impl BuildAction for CompileTypescript<'_> {
     fn command(&self) -> &str {
-        "$tsc $in --outDir $out_dir -d --skipLibCheck"
+        "$tsc $in --outDir $out_dir -d --skipLibCheck --types node"
     }
 
     fn files(&mut self, build: &mut impl build::FilesHandle) {

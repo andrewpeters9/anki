@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Write;
 
+use anyhow::Result;
 use camino::Utf8PathBuf;
 use itertools::Itertools;
 
@@ -13,13 +14,12 @@ use crate::archives::Platform;
 use crate::configure::ConfigureBuild;
 use crate::input::space_separated;
 use crate::input::BuildInput;
-use crate::Result;
 
 #[derive(Debug)]
 pub struct Build {
     pub variables: HashMap<&'static str, String>,
     pub buildroot: Utf8PathBuf,
-    pub release: bool,
+    pub build_profile: BuildProfile,
     pub pools: Vec<(&'static str, usize)>,
     pub trailing_text: String,
     pub host_platform: Platform,
@@ -40,7 +40,7 @@ impl Build {
 
         let mut build = Build {
             buildroot,
-            release: std::env::var("RELEASE").is_ok(),
+            build_profile: BuildProfile::from_env(),
             host_platform: Platform::current(),
             variables: Default::default(),
             pools: Default::default(),
@@ -50,7 +50,7 @@ impl Build {
             groups: Default::default(),
         };
 
-        build.add_action("build:run_configure", ConfigureBuild {})?;
+        build.add_action("build:configure", ConfigureBuild {})?;
 
         Ok(build)
     }
@@ -102,7 +102,7 @@ impl Build {
         };
 
         let mut statement =
-            BuildStatement::from_build_action(group, action, &self.groups, self.release);
+            BuildStatement::from_build_action(group, action, &self.groups, self.build_profile);
 
         if first_invocation {
             let command = statement.prepare_command(command)?;
@@ -144,7 +144,8 @@ rule {action_name}
 
     /// Allows you to add dependencies on files or build steps that aren't
     /// required to build the group itself, but are required by consumers of
-    /// that group.
+    /// that group. Can also be used to allow substitution of local binaries
+    /// for downloaded ones (eg :node_binary).
     pub fn add_dependency(&mut self, group: &str, deps: BuildInput) {
         let files = self.expand_inputs(deps);
         let groups = split_groups(group);
@@ -217,7 +218,7 @@ struct BuildStatement<'a> {
     env_vars: Vec<String>,
     working_dir: Option<String>,
     create_dirs: Vec<String>,
-    release: bool,
+    build_profile: BuildProfile,
     bypass_runner: bool,
 }
 
@@ -226,7 +227,7 @@ impl BuildStatement<'_> {
         group: &str,
         mut action: impl BuildAction,
         existing_outputs: &'a HashMap<String, Vec<String>>,
-        release: bool,
+        build_profile: BuildProfile,
     ) -> BuildStatement<'a> {
         let mut stmt = BuildStatement {
             existing_outputs,
@@ -243,7 +244,7 @@ impl BuildStatement<'_> {
             env_vars: Default::default(),
             working_dir: None,
             create_dirs: Default::default(),
-            release,
+            build_profile,
             bypass_runner: action.bypass_runner(),
         };
         action.files(&mut stmt);
@@ -327,6 +328,23 @@ fn expand_inputs(
     vec
 }
 
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub enum BuildProfile {
+    Debug,
+    Release,
+    ReleaseWithLto,
+}
+
+impl BuildProfile {
+    fn from_env() -> Self {
+        match std::env::var("RELEASE").unwrap_or_default().as_str() {
+            "1" => Self::Release,
+            "2" => Self::ReleaseWithLto,
+            _ => Self::Debug,
+        }
+    }
+}
+
 pub trait FilesHandle {
     /// Add inputs to the build statement. Can be called multiple times with
     /// different variables. This is a shortcut for calling .expand_inputs()
@@ -371,7 +389,9 @@ pub trait FilesHandle {
         subgroup: bool,
     );
 
-    /// Save an output stamp if the command completes successfully.
+    /// Save an output stamp if the command completes successfully. Note that
+    /// if you have bypassed the runner, you will need to create the file
+    /// yourself.
     fn add_output_stamp(&mut self, path: impl Into<String>);
     /// Set an env var for the duration of the provided command(s).
     /// Note this is defined once for the rule, so if the value should change
@@ -388,7 +408,7 @@ pub trait FilesHandle {
     /// at the folder.
     fn create_dir_all(&mut self, key: &str, path: impl Into<String>);
 
-    fn release_build(&self) -> bool;
+    fn build_profile(&self) -> BuildProfile;
 }
 
 impl FilesHandle for BuildStatement<'_> {
@@ -471,8 +491,8 @@ impl FilesHandle for BuildStatement<'_> {
         expand_inputs(inputs, self.existing_outputs)
     }
 
-    fn release_build(&self) -> bool {
-        self.release
+    fn build_profile(&self) -> BuildProfile {
+        self.build_profile
     }
 
     fn add_output_stamp(&mut self, path: impl Into<String>) {

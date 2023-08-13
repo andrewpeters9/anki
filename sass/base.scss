@@ -3,10 +3,10 @@
 @use "button-mixins" as button;
 @use "sass/scrollbar";
 
-$body-color: color(fg);
-$body-bg: color(canvas);
-
-$link-hover-color: color(fg-link);
+$body-color: palette(darkgray, 9);
+$body-color-dark: palette(lightgray, 0);
+$body-bg: palette(lightgray, 2);
+$body-bg-dark: palette(darkgray, 5);
 $link-hover-decoration: none;
 
 $utilities: (
@@ -49,24 +49,15 @@ body {
     &:not(.isMac) * {
         @include scrollbar.custom;
     }
-    &.reduce-motion,
-    &.reduce-motion *:not(.no-reduce-motion) {
-        transition: none !important;
-        animation: none !important;
-    }
     &.no-blur * {
-        backdrop-filter: none !important;
-    }
-    &:not(.fancy),
-    &:not(.fancy) * {
-        box-shadow: none !important;
         backdrop-filter: none !important;
     }
 }
 
-button:not(.btn,.btn-close) {
+button:not(.btn, .btn-close) {
     /* override transition for instant hover response */
-    transition: color var(--transition) ease-in-out, box-shadow var(--transition) ease-in-out !important;
+    transition: color var(--transition) ease-in-out,
+        box-shadow var(--transition) ease-in-out !important;
     border-radius: prop(border-radius);
     @include button.base;
 }

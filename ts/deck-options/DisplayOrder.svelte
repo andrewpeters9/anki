@@ -6,7 +6,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import {
         DeckConfig_Config_NewCardGatherPriority as GatherOrder,
         DeckConfig_Config_NewCardSortOrder as SortOrder,
-    } from "@tslib/anki/deckconfig_pb";
+    } from "@tslib/anki/deck_config_pb";
     import * as tr from "@tslib/ftl";
     import { HelpPage } from "@tslib/help-page";
     import type Carousel from "bootstrap/js/dist/carousel";
@@ -97,11 +97,11 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     const settings = {
         newGatherPriority: {
             title: tr.deckConfigNewGatherPriority(),
-            help: tr.deckConfigNewGatherPriorityTooltip_2() + currentDeck,
+            help: tr.deckConfigNewGatherPriorityTooltip2() + currentDeck,
         },
         newCardSortOrder: {
             title: tr.deckConfigNewCardSortOrder(),
-            help: tr.deckConfigNewCardSortOrderTooltip_2() + currentDeck,
+            help: tr.deckConfigNewCardSortOrderTooltip2() + currentDeck,
         },
         newReviewPriority: {
             title: tr.deckConfigNewReviewPriority(),

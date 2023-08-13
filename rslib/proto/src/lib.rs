@@ -1,6 +1,9 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
+// DeckConfig inside deck_config.proto
+#![allow(clippy::module_inception)]
+
 mod generic_helpers;
 
 macro_rules! protobuf {
@@ -15,10 +18,9 @@ protobuf!(ankidroid, "ankidroid");
 protobuf!(backend, "backend");
 protobuf!(card_rendering, "card_rendering");
 protobuf!(cards, "cards");
-protobuf!(codegen, "codegen");
 protobuf!(collection, "collection");
 protobuf!(config, "config");
-protobuf!(deckconfig, "deckconfig");
+protobuf!(deck_config, "deck_config");
 protobuf!(decks, "decks");
 protobuf!(generic, "generic");
 protobuf!(i18n, "i18n");

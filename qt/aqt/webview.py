@@ -248,6 +248,7 @@ class AnkiWebViewKind(Enum):
     EMPTY_CARDS = "empty cards"
     FIND_DUPLICATES = "find duplicates"
     FIELDS = "fields"
+    IMPORT_LOG = "import log"
 
 
 class AnkiWebView(QWebEngineView):
@@ -546,8 +547,10 @@ html {{ {font} }}
 
         if theme_manager.night_mode:
             doc_class = "night-mode"
+            bs_theme = "dark"
         else:
             doc_class = ""
+            bs_theme = "light"
 
         if is_rtl(anki.lang.current_lang):
             lang_dir = "rtl"
@@ -556,7 +559,7 @@ html {{ {font} }}
 
         html = f"""
 <!doctype html>
-<html class="{doc_class}" dir="{lang_dir}">
+<html class="{doc_class}" dir="{lang_dir}" data-bs-theme="{bs_theme}">
 <head>
     <title>{self.title}</title>
 {head}
@@ -760,15 +763,17 @@ html {{ {font} }}
         self.eval(
             f"""
 (function() {{
-    const doc = document.documentElement.classList;
+    const doc = document.documentElement;
     const body = document.body.classList;
     if ({1 if theme_manager.night_mode else 0}) {{
-        doc.add("night-mode");
+        doc.dataset.bsTheme = "dark";
+        doc.classList.add("night-mode");
         body.add("night_mode");
         body.add("nightMode");
         {"body.add('macos-dark-mode');" if theme_manager.macos_dark_mode() else ""}
     }} else {{
-        doc.remove("night-mode");
+        doc.dataset.bsTheme = "light";
+        doc.classList.remove("night-mode");
         body.remove("night_mode");
         body.remove("nightMode");
         body.remove("macos-dark-mode");

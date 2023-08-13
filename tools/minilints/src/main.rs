@@ -40,10 +40,14 @@ const IGNORED_FOLDERS: &[&str] = &[
     "./tools/workspace-hack",
     "./qt/bundle/PyOxidizer",
     "./target",
+    ".mypy_cache",
+    "./extra",
 ];
 
 fn main() -> Result<()> {
-    let want_fix = env::args().nth(1) == Some("fix".to_string());
+    let mut args = env::args();
+    let want_fix = args.nth(1) == Some("fix".to_string());
+    let stamp = args.next().unwrap();
     let mut ctx = LintContext::new(want_fix);
     ctx.check_contributors()?;
     ctx.check_rust_licenses()?;
@@ -51,6 +55,8 @@ fn main() -> Result<()> {
     if ctx.found_problems {
         std::process::exit(1);
     }
+    write_file(stamp, "")?;
+
     Ok(())
 }
 
@@ -186,7 +192,6 @@ impl LintContext {
         if licenses != existing_licenses {
             if self.want_fix {
                 check_cargo_deny()?;
-                update_hakari()?;
                 write_file(license_path, licenses)?;
             } else {
                 println!("cargo/licenses.json is out of date; run ./ninja fix:minilints");
@@ -198,14 +203,8 @@ impl LintContext {
 }
 
 fn check_cargo_deny() -> Result<()> {
-    Command::run(["cargo", "install", "cargo-deny@0.13.5"])?;
-    Command::run(["cargo", "deny", "check", "-A", "duplicate"])?;
-    Ok(())
-}
-
-fn update_hakari() -> Result<()> {
-    Command::run(["cargo", "install", "cargo-hakari@0.9.23"])?;
-    Command::run(["cargo", "hakari", "generate"])?;
+    Command::run("cargo install cargo-deny@0.13.5")?;
+    Command::run("cargo deny check -A duplicate")?;
     Ok(())
 }
 
@@ -258,7 +257,7 @@ fn check_for_unstaged_changes() {
 
 fn generate_licences() -> Result<String> {
     if which::which("cargo-license").is_err() {
-        Command::run(["cargo", "install", "cargo-license@0.5.1"])?;
+        Command::run("cargo install cargo-license@0.5.1")?;
     }
     let output = Command::run_with_output([
         "cargo-license",

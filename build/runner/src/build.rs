@@ -8,6 +8,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use camino::Utf8Path;
+use camino::Utf8PathBuf;
 use clap::Args;
 use termcolor::Color;
 use termcolor::ColorChoice;
@@ -22,11 +23,11 @@ pub struct BuildArgs {
 }
 
 pub fn run_build(args: BuildArgs) {
-    let build_root = setup_build_root();
+    let build_root = &setup_build_root();
 
     let path = if cfg!(windows) {
         format!(
-            "out\\bin;out\\extracted\\node;{};\\msys64\\usr\\bin",
+            "out\\bin;out\\extracted\\node;node_modules\\.bin;out\\extracted\\win_amd64_audio;{};\\msys64\\usr\\bin",
             env::var("PATH").unwrap()
         )
     } else {
@@ -47,8 +48,6 @@ pub fn run_build(args: BuildArgs) {
     let build_file = build_root.join("build.ninja");
     if !build_file.exists() {
         bootstrap_build();
-    } else {
-        maybe_reconfigure_build(&build_file, &path);
     }
 
     // automatically convert foo:bar references to foo_bar, as Ninja can not
@@ -62,7 +61,7 @@ pub fn run_build(args: BuildArgs) {
         .arg(&build_file)
         .args(ninja_args)
         .env("NINJA_STATUS", "[%f/%t; %r active; %es] ")
-        .env("PATH", path)
+        .env("PATH", &path)
         .env(
             "MYPY_CACHE_DIR",
             build_root.join("tests").join("mypy").into_string(),
@@ -117,7 +116,7 @@ fn get_ninja_command() -> &'static str {
     }
 }
 
-fn setup_build_root() -> &'static Utf8Path {
+fn setup_build_root() -> Utf8PathBuf {
     let build_root = Utf8Path::new("out");
 
     #[cfg(unix)]
@@ -139,22 +138,10 @@ fn setup_build_root() -> &'static Utf8Path {
     }
 
     fs::create_dir_all(build_root).unwrap();
-
-    build_root
-}
-
-fn maybe_reconfigure_build(build_file: &Utf8Path, path: &str) {
-    let output = Command::new("ninja")
-        .arg("-f")
-        .arg(build_file)
-        .arg("build_run_configure")
-        .env("PATH", path)
-        .output()
-        .expect("ninja installed");
-    if !output.status.success() {
-        // The existing build.ninja may be invalid if files have been renamed/removed;
-        // resort to a slower cargo invocation instead to regenerate it.
-        bootstrap_build();
+    if cfg!(windows) {
+        build_root.to_owned()
+    } else {
+        build_root.canonicalize_utf8().unwrap()
     }
 }
 
