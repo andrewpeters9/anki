@@ -1,8 +1,5 @@
 {
     "extends": "../tsconfig.json",
     "include": ["*"],
-    "references": [],
-    "compilerOptions": {
-        "types": ["jest"]
-    }
+    "references": []
 }

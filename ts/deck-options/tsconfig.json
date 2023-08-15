@@ -5,8 +5,5 @@
         { "path": "@tslib" },
         { "path": "../sveltelib" },
         { "path": "../components" }
-    ],
-    "compilerOptions": {
-        "types": ["jest"]
-    }
+    ]
 }

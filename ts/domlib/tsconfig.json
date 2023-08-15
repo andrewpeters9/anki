@@ -8,8 +8,5 @@
         "surround/build/*",
         "surround/tree/*"
     ],
-    "references": [{ "path": "../lib" }],
-    "compilerOptions": {
-        "types": ["jest"]
-    }
+    "references": [{ "path": "../lib" }]
 }
