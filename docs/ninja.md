@@ -9,6 +9,3 @@ Brief notes for people used to the existing Bazel build system:
 - Run tests with './ninja check' (tools\ninja on Windows)
 - Format files with './ninja format'
 - Fix eslint/copyright issues with './ninja fix'
-- Targets are hierarchical, so './ninja check:jest:deck-options' will run
-  the Jest tests for ts/deck-options, and './ninja check:jest' will run all
-  Jest tests.

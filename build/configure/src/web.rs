@@ -46,7 +46,6 @@ fn setup_node(build: &mut Build) -> Result<()> {
             "sass",
             "tsc",
             "tsx",
-            "jest",
             "protoc-gen-es",
         ],
         hashmap! {
@@ -144,23 +143,9 @@ fn build_and_check_tslib(build: &mut Build) -> Result<()> {
     let src_files = inputs![glob!["ts/lib/**"]];
     eslint(build, "lib", "ts/lib", inputs![":ts:lib", &src_files])?;
 
-    build.add_action(
-        "check:jest:lib",
-        jest_test("ts/lib", inputs![":ts:lib", &src_files], true),
-    )?;
-
     build.add_dependency("ts:lib", src_files);
 
     Ok(())
-}
-
-fn jest_test(folder: &str, deps: BuildInput, jsdom: bool) -> impl BuildAction + '_ {
-    JestTest {
-        folder,
-        deps,
-        jest_rc: "ts/jest.config.js".into(),
-        jsdom,
-    }
 }
 
 fn declare_and_check_other_libraries(build: &mut Build) -> Result<()> {
@@ -177,13 +162,6 @@ fn declare_and_check_other_libraries(build: &mut Build) -> Result<()> {
         let folder = library_with_ts.replace(':', "/");
         build.add_dependency(&library_with_ts, inputs.clone());
         eslint(build, library, &folder, inputs.clone())?;
-
-        if matches!(library, "domlib" | "html-filter") {
-            build.add_action(
-                &format!("check:jest:{library}"),
-                jest_test(&folder, inputs, true),
-            )?;
-        }
     }
 
     eslint(build, "scripts", "ts/tools", inputs![glob!("ts/tools/*")])?;
@@ -241,12 +219,6 @@ fn build_and_check_pages(build: &mut Build) -> Result<()> {
         )?;
         let folder = format!("ts/{name}");
         eslint(build, name, &folder, deps.clone())?;
-        if matches!(name, "deck-options" | "change-notetype") {
-            build.add_action(
-                &format!("check:jest:{name}"),
-                jest_test(&folder, deps, false),
-            )?;
-        }
 
         Ok(())
     };

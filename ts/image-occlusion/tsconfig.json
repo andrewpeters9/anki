@@ -11,8 +11,5 @@
         { "path": "../sveltelib" },
         { "path": "../components" },
         { "path": "../tag-editor" }
-    ],
-    "compilerOptions": {
-        "types": ["jest"]
-    }
+    ]
 }

@@ -1,13 +1,16 @@
 {
   "nodeModulesDir": true,
   "lock": "package-lock.json",
-  "tasks": {
-    "math-jax": "deno run --allow-read --allow-write --allow-env --allow-net --allow-run  ts/transform_ts.ts"
+  "imports": {
+    "testing/": "https://deno.land/std@0.198.0/testing/",
+    "assert/": "https://deno.land/std@0.198.0/assert/"
+  },
+  "test": {
+    "include": [
+      "ts/**/*.test.ts"
+    ]
   },
   "compilerOptions": {
-    "isolatedModules": true,
-    "target": "esnext",
-    "module": "esnext",
     "lib": ["dom", "dom.iterable", "dom.asynciterable", "deno.ns", "deno.window", "deno.worker"],
     "strict": true,
     "noImplicitAny": false,
