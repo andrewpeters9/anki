@@ -1,13 +1,13 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import { elementIsBlock } from "../../../lib/dom";
-import { Position } from "../../location";
-import { Match } from "../match-type";
-import type { SplitRange } from "../split-text";
-import type { SurroundFormat } from "../surround-format";
-import type { ElementNode } from "../tree";
-import { FormattingNode } from "../tree";
+import { elementIsBlock } from "../../../lib/dom.ts";
+import { Position } from "../../location/index.ts";
+import { Match } from "../match-type.ts";
+import type { SplitRange } from "../split-text.ts";
+import type { SurroundFormat } from "../surround-format.ts";
+import type { ElementNode } from "../tree/index.ts";
+import { FormattingNode } from "../tree/index.ts";
 
 function nodeWithinRange(node: Node, range: Range): boolean {
     const nodeRange = new Range();

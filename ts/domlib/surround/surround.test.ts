@@ -1,8 +1,13 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+import type { Range, HTMLBodyElement } from "jsdom";
+import { assertStrictEquals } from "testing/asserts.ts";
+import { beforeEach, describe, it } from "testing/bdd.ts";
 
-import { surround } from "./surround";
-import { easyBold, easyUnderline, p } from "./test-utils";
+import { surround } from "./surround.ts";
+import { createDocument, easyBold, easyUnderline, p } from "./test-utils.ts";
+
+const document = createDocument();
 
 describe("surround text", () => {
     let body: HTMLBodyElement;
@@ -11,36 +16,39 @@ describe("surround text", () => {
         body = p("111222");
     });
 
-    test("all text", () => {
-        const range = new Range();
+    it("all text", () => {
+        const range = document.createRange();
         range.selectNode(body.firstChild!);
 
         const surroundedRange = surround(range, body, easyBold);
 
-        expect(body).toHaveProperty("innerHTML", "<b>111222</b>");
-        expect(surroundedRange.toString()).toEqual("111222");
+        console.log({surroundedRange});
+        
+
+        assertStrictEquals(body.innerHTML, "<b>111222</b>");
+        assertStrictEquals(surroundedRange.toString(), "111222");
     });
 
-    test("first half", () => {
-        const range = new Range();
+    it("first half", () => {
+        const range = document.createRange();
         range.setStart(body.firstChild!, 0);
         range.setEnd(body.firstChild!, 3);
 
         const surroundedRange = surround(range, body, easyBold);
 
-        expect(body).toHaveProperty("innerHTML", "<b>111</b>222");
-        expect(surroundedRange.toString()).toEqual("111");
+        assertStrictEquals(body.innerHTML, "<b>111</b>222");
+        assertStrictEquals(surroundedRange.toString(), "111");
     });
 
-    test("second half", () => {
-        const range = new Range();
+    it("second half", () => {
+        const range = document.createRange();
         range.setStart(body.firstChild!, 3);
         range.setEnd(body.firstChild!, 6);
 
         const surroundedRange = surround(range, body, easyBold);
 
-        expect(body).toHaveProperty("innerHTML", "111<b>222</b>");
-        expect(surroundedRange.toString()).toEqual("222");
+        assertStrictEquals(body.innerHTML, "111<b>222</b>", "test2");
+        assertStrictEquals(surroundedRange.toString(), "221", "test1");
     });
 });
 
@@ -52,22 +60,22 @@ describe("surround text next to nested", () => {
             body = p("before<u><b>after</b></u>");
         });
 
-        test("enlarges bottom tag of nested", () => {
-            const range = new Range();
+        it("enlarges bottom tag of nested", () => {
+            const range = document.createRange();
             range.selectNode(body.firstChild!);
             surround(range, body, easyUnderline);
 
-            expect(body).toHaveProperty("innerHTML", "<u>before<b>after</b></u>");
-            // expect(surroundedRange.toString()).toEqual("before");
+            assertStrictEquals(body.innerHTML, "<u>before<b>after</b></u>");
+            // assertStrictEquals(surroundedRange.toString(), "before");
         });
 
-        test("moves nested down", () => {
-            const range = new Range();
+        it("moves nested down", () => {
+            const range = document.createRange();
             range.selectNode(body.firstChild!);
             surround(range, body, easyBold);
 
-            expect(body).toHaveProperty("innerHTML", "<b>before<u>after</u></b>");
-            // expect(surroundedRange.toString()).toEqual("before");
+            assertStrictEquals(body.innerHTML, "<b>before<u>after</u></b>");
+            // assertStrictEquals(surroundedRange.toString(), "before");
         });
     });
 
@@ -78,22 +86,22 @@ describe("surround text next to nested", () => {
             body = p("<u><b>before</b></u>after");
         });
 
-        test("enlarges bottom tag of nested", () => {
-            const range = new Range();
-            range.selectNode(body.childNodes[1]);
+        it("enlarges bottom tag of nested", () => {
+            const range = document.createRange();
+            range.selectNode(body.childNodes[1] as ChildNode);
             surround(range, body, easyUnderline);
 
-            expect(body).toHaveProperty("innerHTML", "<u><b>before</b>after</u>");
-            // expect(surroundedRange.toString()).toEqual("after");
+            assertStrictEquals(body.innerHTML, "<u><b>before</b>after</u>");
+            // assertStrictEquals(surroundedRange.toString(), "after");
         });
 
-        test("moves nested down", () => {
-            const range = new Range();
-            range.selectNode(body.childNodes[1]);
+        it("moves nested down", () => {
+            const range = document.createRange();
+            range.selectNode(body.childNodes[1] as ChildNode);
             surround(range, body, easyBold);
 
-            expect(body).toHaveProperty("innerHTML", "<b><u>before</u>after</b>");
-            // expect(surroundedRange.toString()).toEqual("after");
+            assertStrictEquals(body.innerHTML, "<b><u>before</u>after</b>");
+            // assertStrictEquals(surroundedRange.toString(), "after");
         });
     });
 
@@ -104,13 +112,13 @@ describe("surround text next to nested", () => {
             body = p("aaa<i><b>bbb</b></i><i><b>ccc</b></i>");
         });
 
-        test("extends to both", () => {
-            const range = new Range();
+        it("extends to both", () => {
+            const range = document.createRange();
             range.selectNode(body.firstChild!);
             surround(range, body, easyBold);
 
-            expect(body).toHaveProperty("innerHTML", "<b>aaa<i>bbb</i><i>ccc</i></b>");
-            // expect(surroundedRange.toString()).toEqual("aaa");
+            assertStrictEquals(body.innerHTML, "<b>aaa<i>bbb</i><i>ccc</i></b>");
+            // assertStrictEquals(surroundedRange.toString(), "aaa");
         });
     });
 });
@@ -122,17 +130,17 @@ describe("surround across block element", () => {
         body = p("Before<br><ul><li>First</li><li>Second</li></ul>");
     });
 
-    test("does not insert empty elements", () => {
-        const range = new Range();
+    it("does not insert empty elements", () => {
+        const range = document.createRange();
         range.setStartBefore(body.firstChild!);
         range.setEndAfter(body.lastChild!);
         const surroundedRange = surround(range, body, easyBold);
 
-        expect(body).toHaveProperty(
-            "innerHTML",
+        assertStrictEquals(
+            body.innerHTML,
             "<b>Before</b><br><ul><li><b>First</b></li><li><b>Second</b></li></ul>",
         );
-        expect(surroundedRange.toString()).toEqual("BeforeFirstSecond");
+        assertStrictEquals(surroundedRange.toString(), "BeforeFirstSecond");
     });
 });
 
@@ -143,13 +151,13 @@ describe("next to nested", () => {
         body = p("111<b>222<b>333<b>444</b></b></b>555");
     });
 
-    test("surround after", () => {
-        const range = new Range();
+    it("surround after", () => {
+        const range = document.createRange();
         range.selectNode(body.lastChild!);
         surround(range, body, easyBold);
 
-        expect(body).toHaveProperty("innerHTML", "111<b>222333444555</b>");
-        // expect(surroundedRange.toString()).toEqual("555");
+        assertStrictEquals(body.innerHTML, "111<b>222333444555</b>");
+        // assertStrictEquals(surroundedRange.toString(), "555");
     });
 });
 
@@ -160,16 +168,13 @@ describe("next to element with nested non-matching", () => {
         body = p("111<b>222<i>333<i>444</i></i></b>555");
     });
 
-    test("surround after", () => {
-        const range = new Range();
+    it("surround after", () => {
+        const range = document.createRange();
         range.selectNode(body.lastChild!);
         surround(range, body, easyBold);
 
-        expect(body).toHaveProperty(
-            "innerHTML",
-            "111<b>222<i>333<i>444</i></i>555</b>",
-        );
-        // expect(surroundedRange.toString()).toEqual("555");
+        assertStrictEquals(body.innerHTML, "111<b>222<i>333<i>444</i></i>555</b>");
+        // assertStrictEquals(surroundedRange.toString(), "555");
     });
 });
 
@@ -180,13 +185,13 @@ describe("next to element with text element text", () => {
         body = p("111<b>222<b>333</b>444</b>555");
     });
 
-    test("surround after", () => {
-        const range = new Range();
+    it("surround after", () => {
+        const range = document.createRange();
         range.selectNode(body.lastChild!);
         surround(range, body, easyBold);
 
-        expect(body).toHaveProperty("innerHTML", "111<b>222333444555</b>");
-        // expect(surroundedRange.toString()).toEqual("555");
+        assertStrictEquals(body.innerHTML, "111<b>222333444555</b>");
+        // assertStrictEquals(surroundedRange.toString(), "555");
     });
 });
 
@@ -197,14 +202,14 @@ describe("surround elements that already have nested block", () => {
         body = p("<b>1<b>2</b></b><br>");
     });
 
-    test("normalizes nodes", () => {
-        const range = new Range();
-        range.selectNode(body.children[0]);
+    it("normalizes nodes", () => {
+        const range = document.createRange();
+        range.selectNode(body.children[0] as Element);
 
         surround(range, body, easyBold);
 
-        expect(body).toHaveProperty("innerHTML", "<b>12</b><br>");
-        // expect(surroundedRange.toString()).toEqual("12");
+        assertStrictEquals(body.innerHTML, "<b>12</b><br>");
+        // assertStrictEquals(surroundedRange.toString(), "12");
     });
 });
 
@@ -215,18 +220,18 @@ describe("surround complicated nested structure", () => {
         body = p("<i>1</i><b><i>2</i>3<i>4</i></b><i>5</i>");
     });
 
-    test("normalize nodes", () => {
-        const range = new Range();
+    it("normalize nodes", () => {
+        const range = document.createRange();
         range.setStartBefore(body.firstElementChild!.firstChild!);
         range.setEndAfter(body.lastElementChild!.firstChild!);
 
         const surroundedRange = surround(range, body, easyBold);
 
-        expect(body).toHaveProperty(
-            "innerHTML",
+        assertStrictEquals(
+            body.innerHTML,
             "<b><i>1</i><i>2</i>3<i>4</i><i>5</i></b>",
         );
-        expect(surroundedRange.toString()).toEqual("12345");
+        assertStrictEquals(surroundedRange.toString(), "12345");
     });
 });
 
@@ -238,15 +243,15 @@ describe("skips over empty elements", () => {
             body = p("before<br>after");
         });
 
-        test("normalize nodes", () => {
-            const range = new Range();
+        it("normalize nodes", () => {
+            const range = document.createRange();
             range.setStartBefore(body.firstChild!);
             range.setEndAfter(body.childNodes[2]!);
 
             const surroundedRange = surround(range, body, easyBold);
 
-            expect(body).toHaveProperty("innerHTML", "<b>before<br>after</b>");
-            expect(surroundedRange.toString()).toEqual("beforeafter");
+            assertStrictEquals(body.innerHTML, "<b>before<br>after</b>");
+            assertStrictEquals(surroundedRange.toString(), "beforeafter");
         });
     });
 
@@ -257,24 +262,24 @@ describe("skips over empty elements", () => {
             body = p("before<br><b>after</b>");
         });
 
-        test("normalize nodes", () => {
-            const range = new Range();
+        it("normalize nodes", () => {
+            const range = document.createRange();
             range.selectNode(body.firstChild!);
 
             surround(range, body, easyBold);
 
-            expect(body).toHaveProperty("innerHTML", "<b>before<br>after</b>");
-            // expect(surroundedRange.toString()).toEqual("before");
+            assertStrictEquals(body.innerHTML, "<b>before<br>after</b>");
+            // assertStrictEquals(surroundedRange.toString(), "before");
         });
 
-        test("normalize node contents", () => {
-            const range = new Range();
+        it("normalize node contents", () => {
+            const range = document.createRange();
             range.selectNodeContents(body.firstChild!);
 
             const surroundedRange = surround(range, body, easyBold);
 
-            expect(body).toHaveProperty("innerHTML", "<b>before<br>after</b>");
-            expect(surroundedRange.toString()).toEqual("before");
+            assertStrictEquals(body.innerHTML, "<b>before<br>after</b>");
+            assertStrictEquals(surroundedRange.toString(), "before");
         });
     });
 });
@@ -283,9 +288,9 @@ describe("skips over empty elements", () => {
 // describe("special cases when surrounding within range.commonAncestor", () => {
 //     // these are not vital but rather define how the algorithm works in edge cases
 
-//     test("does not normalize beyond level of contained text nodes", () => {
+//     it("does not normalize beyond level of contained text nodes", () => {
 //         const body = p("<b>before<u>nested</u>after</b>");
-//         const range = new Range();
+//         const range = document.createRange();
 //         range.selectNode(body.firstChild!.childNodes[1].firstChild!);
 
 //         const { addedNodes, removedNodes, surroundedRange } = surround(
@@ -294,46 +299,45 @@ describe("skips over empty elements", () => {
 //             easyBold,
 //         );
 
-//         expect(addedNodes).toHaveLength(1);
-//         expect(removedNodes).toHaveLength(0);
-//         expect(body).toHaveProperty(
-//             "innerHTML",
+//         assertStrictEquals(addedNodes.length, 1);
+//         assertStrictEquals(removedNodes.length, 0);
+//         assertStrictEquals(body,innerHTML,
 //             "<b>before<b><u>nested</u></b>after</b>",
 //         );
-//         expect(surroundedRange.toString()).toEqual("nested");
+//         assertStrictEquals(surroundedRange.toString(), "nested");
 //     });
 
-//     test("does not normalize beyond level of contained text nodes 2", () => {
+//     Deno.test("does not normalize beyond level of contained text nodes 2", () => {
 //         const body = p("<b>aaa<b>bbb</b><b>ccc</b></b>");
-//         const range = new Range();
+//         const range = document.createRange();
 //         range.setStartBefore(body.firstChild!.firstChild!);
 //         range.setEndAfter(body.firstChild!.childNodes[1].firstChild!);
 
 //         const { addedNodes, removedNodes } = surround(range, body, easyBold);
 
-//         expect(body).toHaveProperty("innerHTML", "<b><b>aaabbbccc</b></b>");
-//         expect(addedNodes).toHaveLength(1);
-//         expect(removedNodes).toHaveLength(2);
-//         // expect(surroundedRange.toString()).toEqual("aaabbb"); // is aaabbbccc instead
+//         assertStrictEquals(body.innerHTML, "<b><b>aaabbbccc</b></b>");
+//         assertStrictEquals(addedNodes.length, 1);
+//         assertStrictEquals(removedNodes.length, 2);
+//         // assertStrictEquals(surroundedRange.toString(), "aaabbb"); // is aaabbbccc instead
 //     });
 
-//     test("does normalize beyond level of contained text nodes", () => {
+//     Deno.test("does normalize beyond level of contained text nodes", () => {
 //         const body = p("<b><b>aaa</b><b><b>bbb</b><b>ccc</b></b></b>");
-//         const range = new Range();
+//         const range = document.createRange();
 //         range.setStartBefore(body.firstChild!.childNodes[1].firstChild!.firstChild!);
 //         range.setEndAfter(body.firstChild!.childNodes[1].childNodes[1].firstChild!);
 
 //         const { addedNodes, removedNodes } = surround(range, body, easyBold);
 
-//         expect(body).toHaveProperty("innerHTML", "<b><b>aaabbbccc</b></b>");
-//         expect(addedNodes).toHaveLength(1);
-//         expect(removedNodes).toHaveLength(4);
-//         // expect(surroundedRange.toString()).toEqual("aaabbb"); // is aaabbbccc instead
+//         assertStrictEquals(body.innerHTML, "<b><b>aaabbbccc</b></b>");
+//         assertStrictEquals(addedNodes.length, 1);
+//         assertStrictEquals(removedNodes.length, 4);
+//         // assertStrictEquals(surroundedRange.toString(), "aaabbb"); // is aaabbbccc instead
 //     });
 
-//     test("does remove even if there is already equivalent surrounding in place", () => {
+//     Deno.test("does remove even if there is already equivalent surrounding in place", () => {
 //         const body = p("<b>before<b><u>nested</u></b>after</b>");
-//         const range = new Range();
+//         const range = document.createRange();
 //         range.selectNode(body.firstChild!.childNodes[1].firstChild!.firstChild!);
 
 //         const { addedNodes, removedNodes, surroundedRange } = surround(
@@ -342,12 +346,11 @@ describe("skips over empty elements", () => {
 //             easyBold,
 //         );
 
-//         expect(addedNodes).toHaveLength(1);
-//         expect(removedNodes).toHaveLength(1);
-//         expect(body).toHaveProperty(
-//             "innerHTML",
+//         assertStrictEquals(addedNodes.length, 1);
+//         assertStrictEquals(removedNodes.length, 1);
+//         assertStrictEquals(body.innerHTML,
 //             "<b>before<b><u>nested</u></b>after</b>",
 //         );
-//         expect(surroundedRange.toString()).toEqual("nested");
+//         assertStrictEquals(surroundedRange.toString(), "nested");
 //     });
 // });

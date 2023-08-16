@@ -1,11 +1,12 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import { nodeIsElement } from "../../../lib/dom";
-import { FlatRange } from "../flat-range";
-import type { Match } from "../match-type";
-import { ElementNode } from "./element-node";
-import { TreeNode } from "./tree-node";
+import { nodeIsElement } from "@tslib/dom";
+
+import { FlatRange } from "../flat-range.ts";
+import type { Match } from "../match-type.ts";
+import { ElementNode } from "./element-node.ts";
+import { TreeNode } from "./tree-node.ts";
 
 /**
  * Represents a potential insertion point for a tag or, more generally, a point for starting a format procedure.

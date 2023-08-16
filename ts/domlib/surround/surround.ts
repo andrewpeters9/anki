@@ -1,13 +1,13 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import type { Matcher } from "../find-above";
-import { findFarthest } from "../find-above";
-import { apply, ApplyFormat, ReformatApplyFormat, UnsurroundApplyFormat } from "./apply";
-import { build, BuildFormat, ReformatBuildFormat, UnsurroundBuildFormat } from "./build";
-import { boolMatcher } from "./match-type";
-import { splitPartiallySelected } from "./split-text";
-import type { SurroundFormat } from "./surround-format";
+import type { Matcher } from "../find-above.ts";
+import { findFarthest } from "../find-above.ts";
+import { apply, ApplyFormat, ReformatApplyFormat, UnsurroundApplyFormat } from "./apply/index.ts";
+import { build, BuildFormat, ReformatBuildFormat, UnsurroundBuildFormat } from "./build/index.ts";
+import { boolMatcher } from "./match-type.ts";
+import { splitPartiallySelected } from "./split-text.ts";
+import type { SurroundFormat } from "./surround-format.ts";
 
 function buildAndApply<T>(
     node: Node,
@@ -26,11 +26,8 @@ function surroundOnCorrectNode<T>(
     apply: ApplyFormat<T>,
     matcher: Matcher,
 ): Range {
-    const node = findFarthest(
-        range.commonAncestorContainer,
-        base,
-        matcher,
-    ) ?? range.commonAncestorContainer;
+    const node = findFarthest(range.commonAncestorContainer, base, matcher)
+        ?? range.commonAncestorContainer;
 
     return buildAndApply(node, build, apply);
 }

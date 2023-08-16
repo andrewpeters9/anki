@@ -1,12 +1,12 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import { elementIsEmpty, nodeIsElement, nodeIsText } from "../../../lib/dom";
-import type { Match } from "../match-type";
-import type { TreeNode } from "../tree";
-import { BlockNode, ElementNode, FormattingNode } from "../tree";
-import { appendNode } from "./add-merge";
-import type { BuildFormat } from "./format";
+import { elementIsEmpty, nodeIsElement, nodeIsText } from "../../../lib/dom.ts";
+import type { Match } from "../match-type.ts";
+import type { TreeNode } from "../tree/index.ts";
+import { BlockNode, ElementNode, FormattingNode } from "../tree/index.ts";
+import { appendNode } from "./add-merge.ts";
+import type { BuildFormat } from "./format.ts";
 
 function buildFromElement<T>(
     element: Element,
