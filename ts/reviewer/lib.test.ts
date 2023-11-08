@@ -1,6 +1,6 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
-
+import { assertEquals, assertThrows, assertNotEquals } from "https://deno.land/std@0.198.0/assert/mod.ts";
 import { SchedulingStatesWithContext } from "@tslib/anki/frontend_pb";
 import { SchedulingContext, SchedulingStates } from "@tslib/anki/scheduler_pb";
 
@@ -82,63 +82,69 @@ function exampleInput(): SchedulingStatesWithContext {
     );
 }
 
-test("can change oneof", () => {
+Deno.test("can change oneof", () => {
     let states = exampleInput().states!;
     const jsonStates = states.toJson({ "emitDefaultValues": true }) as any;
     // again should be a relearning state
     const inner = states.again?.kind?.value?.kind;
-    assert(inner?.case === "relearning");
-    expect(inner.value.learning?.remainingSteps).toBe(1);
+    console.assert(inner?.case === "relearning");
+    assertEquals(inner.value.learning?.remainingSteps, 1);
     // change it to a review state
     jsonStates.again.normal = { "review": jsonStates.again.normal.relearning.review };
     states = SchedulingStates.fromJson(jsonStates);
     const inner2 = states.again?.kind?.value?.kind;
-    assert(inner2?.case === "review");
+    console.assert(inner2?.case === "review");
     // however, it's not valid to have multiple oneofs set
     jsonStates.again.normal = { "review": jsonStates.again.normal.review, "learning": {} };
-    expect(() => {
+    assertThrows(() => {
         SchedulingStates.fromJson(jsonStates);
-    }).toThrow();
+    });
 });
 
-test("no-op transform", async () => {
+Deno.test("no-op transform", async () => {
     const input = exampleInput();
-    const output = await applyStateTransform(input, async (states: any, customData, ctx) => {
-        expect(ctx.deckName).toBe("hello");
-        expect(customData.easy.seed).toBe(2104);
-        expect(states!.again!.normal!.relearning!.learning!.remainingSteps).toBe(1);
+    
+    const output = await applyStateTransform(input, async (states: any, customData: any, ctx: any) => {
+      assertEquals(ctx.deckName, "hello");
+      assertEquals(customData.easy.seed, 2104);
+      assertEquals(states!.again!.normal!.relearning!.learning!.remainingSteps, 1); 
     });
-    // the input only has customData set on `current`, so we need to update it
-    // before we compare the two as equal
+  
     input.states!.again!.customData = input.states!.current!.customData;
     input.states!.hard!.customData = input.states!.current!.customData;
     input.states!.good!.customData = input.states!.current!.customData;
     input.states!.easy!.customData = input.states!.current!.customData;
-    expect(output).toStrictEqual(input.states);
-});
-
-test("custom data change", async () => {
-    const output = await applyStateTransform(exampleInput(), async (_states: any, customData, _ctx) => {
-        customData.easy = { foo: "hello world" };
+  
+    assertEquals(output, input.states);
+  });
+  
+  Deno.test("custom data change", async () => {
+    const output = await applyStateTransform(exampleInput(), async (_states: any, customData: any, _ctx: any) => {
+      customData.easy = { foo: "hello world" };
     });
-    expect(output!.hard!.customData).not.toMatch(/hello world/);
-    expect(output!.easy!.customData).toBe("{\"foo\":\"hello world\"}");
-});
+  
+    assertEquals(output!.hard!.customData, undefined);
+    assertEquals(JSON.stringify(output!.easy!.customData), JSON.stringify({foo: "hello world"})); 
+  });
 
-test("adjust interval", async () => {
-    const output = await applyStateTransform(exampleInput(), async (states: any, _customData, _ctx) => {
-        states.good.normal.review.scheduledDays = 10;
+  Deno.test("adjust interval", async () => {
+    const output = await applyStateTransform(exampleInput(), async (states: any) => {
+      states.good.normal.review.scheduledDays = 10;
     });
+    
     const kind = output.good?.kind?.value?.kind;
-    assert(kind?.case === "review");
-    expect(kind.value.scheduledDays).toBe(10);
-});
-
-test("default context values exist", async () => {
+  
+    assertNotEquals(kind?.case, undefined);
+    assertEquals(kind?.case, "review");
+    assertEquals(kind.value.scheduledDays, 10);
+  });
+  
+  Deno.test("default context values exist", () => {
     const ctx = SchedulingContext.fromBinary(new Uint8Array());
-    expect(ctx.deckName).toBe("");
-    expect(ctx.seed).toBe(0n);
-});
+    
+    assertEquals(ctx.deckName, "");
+    assertEquals(ctx.seed, 0n);
+  });
 
 function assert(condition: boolean): asserts condition {
     if (!condition) {

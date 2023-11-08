@@ -3,8 +3,8 @@
 
 import sqlFormatter from "@sqltools/formatter";
 import { createPatch } from "diff";
-import { readFileSync, writeFileSync } from "fs";
-import { argv } from "process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { argv } from "node:process";
 
 function formatText(text: string): string {
     let newText: string = sqlFormatter.format(text, {
@@ -41,5 +41,5 @@ for (const path of files) {
     }
 }
 if (errorFound) {
-    process.exit(1);
+    Deno.exit(1);
 }

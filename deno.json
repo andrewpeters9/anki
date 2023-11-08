@@ -1,0 +1,22 @@
+{
+  "nodeModulesDir": true,
+  "lock": "package-lock.json",
+  "imports": {
+    "testing/": "https://deno.land/std@0.198.0/testing/",
+    "assert/": "https://deno.land/std@0.198.0/assert/"
+  },
+  "test": {
+    "include": [
+      "ts/**/*.test.ts"
+    ]
+  },
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "dom.asynciterable", "deno.ns", "deno.window", "deno.worker"],
+    "strict": true,
+    "noImplicitAny": false,
+    "alwaysStrict": true,
+    "noUncheckedIndexedAccess": true,
+    "suppressImplicitAnyIndexErrors": true,
+    "jsx": "react"
+  }
+}

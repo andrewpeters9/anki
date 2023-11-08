@@ -5,6 +5,7 @@ import "./fields-base.css";
 
 import { ModuleName, setupI18n } from "@tslib/i18n";
 import { checkNightMode } from "@tslib/nightmode";
+
 import FieldsPage from "./FieldsPage.svelte";
 
 const i18n = setupI18n({

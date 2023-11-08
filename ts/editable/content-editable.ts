@@ -10,7 +10,7 @@ import type { Callback } from "@tslib/typing";
 
 import type { SelectionLocation } from "../domlib/location";
 import { restoreSelection, saveSelection } from "../domlib/location";
-import { placeCaretAfterContent } from "../domlib/place-caret";
+import { placeCaretAfterContent } from "../domlib/index.ts";
 import { HandlerList } from "../sveltelib/handler-list";
 
 /**

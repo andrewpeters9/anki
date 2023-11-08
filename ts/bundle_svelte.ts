@@ -4,9 +4,9 @@
 import { build } from "esbuild";
 import { sassPlugin } from "esbuild-sass-plugin";
 import sveltePlugin from "esbuild-svelte";
-import { readFileSync, writeFileSync } from "fs";
-import { basename } from "path";
-import { argv, env } from "process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { basename } from "node:path";
+import { argv, env } from "node:process";
 import sveltePreprocess from "svelte-preprocess";
 import { typescript } from "svelte-preprocess-esbuild";
 
