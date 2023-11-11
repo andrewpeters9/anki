@@ -1,9 +1,9 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import type { TreeNode } from "../tree";
-import { FormattingNode } from "../tree";
-import type { BuildFormat } from "./format";
+import type { TreeNode } from "../tree/index.ts";
+import { FormattingNode } from "../tree/index.ts";
+import type { BuildFormat } from "./format.ts";
 
 function mergeAppendNode<T>(
     initial: TreeNode[],

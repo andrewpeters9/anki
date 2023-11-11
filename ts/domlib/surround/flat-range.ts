@@ -1,8 +1,8 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import { nodeIsComment, nodeIsElement, nodeIsText } from "../../lib/dom";
-import { ascend } from "../../lib/node";
+import { nodeIsComment, nodeIsElement, nodeIsText } from "../../lib/dom.ts";
+import { ascend } from "../../lib/node.ts";
 
 /**
  * Represents a subset of DOM ranges which can be called with `.surroundContents()`.
@@ -22,7 +22,11 @@ export class FlatRange {
      * @remarks
      * Indices should be >= 0 and startIndex <= endIndex.
      */
-    static make(node: Node, startIndex: number, endIndex = startIndex + 1): FlatRange {
+    static make(
+        node: Node,
+        startIndex: number,
+        endIndex = startIndex + 1,
+    ): FlatRange {
         return new FlatRange(node, startIndex, endIndex);
     }
 
@@ -57,7 +61,10 @@ export class FlatRange {
      */
     select(node: Node): void {
         this.parent = ascend(node);
-        this.startIndex = Array.prototype.indexOf.call(this.parent.childNodes, node);
+        this.startIndex = Array.prototype.indexOf.call(
+            this.parent.childNodes,
+            node,
+        );
         this.endIndex = this.startIndex + 1;
     }
 

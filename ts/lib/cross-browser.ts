@@ -4,7 +4,7 @@
 /* eslint
 @typescript-eslint/triple-slash-reference: "off",
  */
-/// <reference path="shadow-dom.d.ts" />
+/// <reference path="./shadow-dom.d.ts" />
 
 /**
  * Gecko has no .getSelection on ShadowRoot, only .activeElement

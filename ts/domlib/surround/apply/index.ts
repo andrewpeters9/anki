@@ -1,11 +1,15 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import type { TreeNode } from "../tree";
-import { FormattingNode } from "../tree";
-import type { ApplyFormat } from "./format";
+import type { TreeNode } from "../tree/index.ts";
+import { FormattingNode } from "../tree/index.ts";
+import type { ApplyFormat } from "./format.ts";
 
-function iterate<T>(node: TreeNode, format: ApplyFormat<T>, leftShift: number): number {
+function iterate<T>(
+    node: TreeNode,
+    format: ApplyFormat<T>,
+    leftShift: number,
+): number {
     let innerShift = 0;
 
     for (const child of node.children) {
@@ -42,4 +46,4 @@ export function apply<T>(nodes: TreeNode[], format: ApplyFormat<T>): void {
     }
 }
 
-export { ApplyFormat, ReformatApplyFormat, UnsurroundApplyFormat } from "./format";
+export { ApplyFormat, ReformatApplyFormat, UnsurroundApplyFormat } from "./format.ts";

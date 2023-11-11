@@ -5,7 +5,6 @@
     "compilerOptions": {
         // css-browser-selector fails if our output bundle is strict
         "alwaysStrict": false,
-        "composite": false,
-        "types": ["jest"]
+        "composite": false
     }
 }

@@ -1,7 +1,7 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import { getSelection } from "./cross-browser";
+import { getSelection } from "./cross-browser.ts";
 
 export function nodeIsElement(node: Node): node is Element {
     return node.nodeType === Node.ELEMENT_NODE;
@@ -11,7 +11,9 @@ export function nodeIsElement(node: Node): node is Element {
  * In the web this is probably equivalent to `nodeIsElement`, but this is
  * convenient to convince Typescript.
  */
-export function nodeIsCommonElement(node: Node): node is HTMLElement | SVGElement {
+export function nodeIsCommonElement(
+    node: Node,
+): node is HTMLElement | SVGElement {
     return node instanceof HTMLElement || node instanceof SVGElement;
 }
 
@@ -61,7 +63,9 @@ export const BLOCK_ELEMENTS = [
 ];
 
 export function hasBlockAttribute(element: Element): boolean {
-    return element.hasAttribute("block") && element.getAttribute("block") !== "false";
+    return (
+        element.hasAttribute("block") && element.getAttribute("block") !== "false"
+    );
 }
 
 export function elementIsBlock(element: Element): boolean {

@@ -10,10 +10,5 @@
         {
             "path": "../components"
         }
-    ],
-    "compilerOptions": {
-        "types": [
-            "jest"
-        ]
-    }
+    ]
 }

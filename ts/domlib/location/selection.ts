@@ -1,10 +1,10 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import { getRange, getSelection } from "../../lib/cross-browser";
-import type { CaretLocation } from "./location";
-import { compareLocations, Position } from "./location";
-import { getNodeCoordinates } from "./node";
+import { getRange, getSelection } from "../../lib/cross-browser.ts";
+import type { CaretLocation } from "./location.ts";
+import { compareLocations, Position } from "./location.ts";
+import { getNodeCoordinates } from "./node.ts";
 
 export interface SelectionLocationCollapsed {
     readonly anchor: CaretLocation;

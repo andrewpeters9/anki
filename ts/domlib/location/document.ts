@@ -1,10 +1,10 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import { getSelection } from "../../lib/cross-browser";
-import { findNodeFromCoordinates } from "./node";
-import type { SelectionLocation, SelectionLocationContent } from "./selection";
-import { getSelectionLocation } from "./selection";
+import { getSelection } from "../../lib/cross-browser.ts";
+import { findNodeFromCoordinates } from "./node.ts";
+import type { SelectionLocation, SelectionLocationContent } from "./selection.ts";
+import { getSelectionLocation } from "./selection.ts";
 
 function unselect(selection: Selection): void {
     selection.empty();

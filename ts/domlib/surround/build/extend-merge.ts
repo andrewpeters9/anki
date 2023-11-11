@@ -1,11 +1,11 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import type { BuildFormat } from "../build";
-import type { TreeNode } from "../tree";
-import { FormattingNode } from "../tree";
-import { appendNode, insertNode } from "./add-merge";
-import { buildFromNode } from "./build-tree";
+import type { TreeNode } from "../tree/index.ts";
+import { FormattingNode } from "../tree/index.ts";
+import { appendNode, insertNode } from "./add-merge.ts";
+import { buildFromNode } from "./build-tree.ts";
+import type { BuildFormat } from "./index.ts";
 
 function mergePreviousTrees<T>(forest: TreeNode[], format: BuildFormat<T>): TreeNode[] {
     const [first, ...tail] = forest;

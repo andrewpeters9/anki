@@ -10,8 +10,9 @@ import "@tslib/i18n";
 import { ChangeNotetypeInfo, NotetypeNames } from "@tslib/anki/notetypes_pb";
 import * as tr from "@tslib/ftl";
 import { get } from "svelte/store";
+import { assert, assertEquals, assertFalse } from "testing/asserts.ts";
 
-import { ChangeNotetypeState, MapContext, negativeOneToNull } from "./lib";
+import { ChangeNotetypeState, MapContext, negativeOneToNull } from "./lib.ts";
 
 const exampleNames = {
     entries: [
@@ -82,51 +83,62 @@ function sameState(): ChangeNotetypeState {
     );
 }
 
-test("proto conversion", () => {
+Deno.test("proto conversion", () => {
     const state = differentState();
-    expect(get(state.info).fields).toStrictEqual([0, 1, null]);
-    expect(negativeOneToNull(state.dataForSaving().newFields)).toStrictEqual([
+    assertEquals(get(state.info).fields, [0, 1, null]);
+    assertEquals(negativeOneToNull(state.dataForSaving().newFields), [
         0,
         1,
         null,
     ]);
 });
 
-test("mapping", () => {
+Deno.test("mapping", () => {
     const state = differentState();
-    expect(get(state.info).getNewName(MapContext.Field, 0)).toBe("Front");
-    expect(get(state.info).getNewName(MapContext.Field, 1)).toBe("Back");
-    expect(get(state.info).getNewName(MapContext.Field, 2)).toBe("Add Reverse");
-    expect(get(state.info).getOldNamesIncludingNothing(MapContext.Field)).toStrictEqual(
-        ["Front", "Back", tr.changeNotetypeNothing()],
-    );
-    expect(get(state.info).getOldIndex(MapContext.Field, 0)).toBe(0);
-    expect(get(state.info).getOldIndex(MapContext.Field, 1)).toBe(1);
-    expect(get(state.info).getOldIndex(MapContext.Field, 2)).toBe(2);
+
+    assertEquals(get(state.info).getNewName(MapContext.Field, 0), "Front");
+    assertEquals(get(state.info).getNewName(MapContext.Field, 1), "Back");
+    assertEquals(get(state.info).getNewName(MapContext.Field, 2), "Add Reverse");
+
+    assertEquals(get(state.info).getOldNamesIncludingNothing(MapContext.Field), [
+        "Front",
+        "Back",
+        tr.changeNotetypeNothing(),
+    ]);
+
+    assertEquals(get(state.info).getOldIndex(MapContext.Field, 0), 0);
+    assertEquals(get(state.info).getOldIndex(MapContext.Field, 1), 1);
+    assertEquals(get(state.info).getOldIndex(MapContext.Field, 2), 2);
+
     state.setOldIndex(MapContext.Field, 2, 0);
-    expect(get(state.info).getOldIndex(MapContext.Field, 2)).toBe(0);
+    assertEquals(get(state.info).getOldIndex(MapContext.Field, 2), 0);
 
     // the same template shouldn't be mappable twice
-    expect(
+    assertEquals(
         get(state.info).getOldNamesIncludingNothing(MapContext.Template),
-    ).toStrictEqual(["Card 1", tr.changeNotetypeNothing()]);
-    expect(get(state.info).getOldIndex(MapContext.Template, 0)).toBe(0);
-    expect(get(state.info).getOldIndex(MapContext.Template, 1)).toBe(1);
+        ["Card 1", tr.changeNotetypeNothing()],
+    );
+
+    assertEquals(get(state.info).getOldIndex(MapContext.Template, 0), 0);
+    assertEquals(get(state.info).getOldIndex(MapContext.Template, 1), 1);
+
     state.setOldIndex(MapContext.Template, 1, 0);
-    expect(get(state.info).getOldIndex(MapContext.Template, 0)).toBe(1);
-    expect(get(state.info).getOldIndex(MapContext.Template, 1)).toBe(0);
+    assertEquals(get(state.info).getOldIndex(MapContext.Template, 0), 1);
+    assertEquals(get(state.info).getOldIndex(MapContext.Template, 1), 0);
 });
 
-test("unused", () => {
+Deno.test("unused", () => {
     const state = differentState();
-    expect(get(state.info).unusedItems(MapContext.Field)).toStrictEqual([]);
+    assertEquals(get(state.info).unusedItems(MapContext.Field), []);
+
     state.setOldIndex(MapContext.Field, 0, 2);
-    expect(get(state.info).unusedItems(MapContext.Field)).toStrictEqual(["Front"]);
+    assertEquals(get(state.info).unusedItems(MapContext.Field), ["Front"]);
 });
 
-test("unchanged", () => {
+Deno.test("unchanged", () => {
     let state = differentState();
-    expect(get(state.info).unchanged()).toBe(false);
+    assertFalse(get(state.info).unchanged());
+
     state = sameState();
-    expect(get(state.info).unchanged()).toBe(true);
+    assert(get(state.info).unchanged());
 });
